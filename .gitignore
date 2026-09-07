@@ -21,6 +21,7 @@ secrets/
 credentials.json
 *.env.bak
 *.env.tmp
+*.zip
 
 # Dependencies
 node_modules/
