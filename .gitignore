@@ -4,14 +4,23 @@
 .env.*.local
 .env.production
 .env.development
+.env.test
+.env.staging
 .env.*
 !.env.example
 *.pem
 *.key
 *.cert
 *.pfx
+*.token
+*.secret
+*.passwd
+id_rsa*
+id_ed25519*
 secrets/
 credentials.json
+*.env.bak
+*.env.tmp
 
 # Dependencies
 node_modules/
@@ -38,5 +47,6 @@ desktop.ini
 
 # Test scratch & local helpers
 test_runner.js
+test_security.js
 push_to_github.bat
 setup_git.ps1
