@@ -1,3 +1,18 @@
+# Environment & Secrets (NEVER COMMIT OR LEAK)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.pfx
+secrets/
+credentials.json
+
 # Dependencies
 node_modules/
 package-lock.json
@@ -24,3 +39,4 @@ desktop.ini
 # Test scratch & local helpers
 test_runner.js
 push_to_github.bat
+setup_git.ps1
