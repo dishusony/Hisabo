@@ -1,0 +1,13 @@
+{
+  "name": "hisabo",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Hisabo - Smart Monthly Expense Tracker Web Application",
+  "scripts": {
+    "start": "serve . -l 3000",
+    "dev": "serve . -l 3000"
+  },
+  "keywords": ["expense-tracker", "finance", "budget", "calculator"],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hisabo - Smart Monthly Expense Tracker</title>
+  <meta name="description" content="Hisabo - An effortless, clean, responsive monthly expense tracker web application with dynamic budget tracking, visual analytics, and 1-tap logging.">
+
+  <!-- Google Fonts: Outfit (Brand & Headings) + Plus Jakarta Sans (Clean UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Ambient background glow for sleek modern aesthetics -->
+  <div class="ambient-glow"></div>
+  <div class="ambient-glow-2"></div>
+
+  <div class="app-container">
+    <!-- Main App Header -->
+    <header class="app-header">
+      <div class="brand-wrapper">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3a4 4 0 0 0 0-8"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Hisabo</h1>
+          <p class="brand-tagline">Smart Monthly Expense & Budget Tracker</p>
+        </div>
+      </div>
+
+      <!-- Month Switcher & Quick Controls -->
+      <div class="header-controls">
+        <div class="month-selector-bar">
+          <button id="prevMonthBtn" class="month-nav-btn" title="Previous Month" aria-label="Previous Month">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          
+          <div class="month-dropdown-wrapper">
+            <span id="currentMonthDisplay" class="month-display-label">September 2026</span>
+            <select id="monthSelect" class="month-select-input" aria-label="Select Tracking Month"></select>
+          </div>
+
+          <button id="nextMonthBtn" class="month-nav-btn" title="Next Month" aria-label="Next Month">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+
+        <button id="currentMonthBtn" class="btn-secondary btn-sm" title="Jump to Current Month">
+          <span>This Month</span>
+        </button>
+
+        <!-- Theme Palette Picker Button -->
+        <button id="themePickerBtn" class="btn-secondary btn-sm" title="Choose Visual Theme" aria-label="Choose Theme">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+          <span class="btn-text" id="themeBtnLabel">Theme</span>
+        </button>
+
+        <!-- Prominent Add Expense Button -->
+        <button class="btn-primary trigger-add-expense" id="headerAddExpenseBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>+ Add Expense</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Intuitive Navigation Tabs (Expenses / Analytics / Tools) -->
+    <nav class="view-tabs-bar" aria-label="Main Views">
+      <button class="view-tab active" data-tab="expenses" id="tabBtnExpenses">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>Expenses</span>
+      </button>
+
+      <button class="view-tab" data-tab="analytics" id="tabBtnAnalytics">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analytics & Charts</span>
+      </button>
+
+      <button class="view-tab" data-tab="tools" id="tabBtnTools">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Tools & Backup</span>
+      </button>
+    </nav>
+
+    <!-- ======================================================================
+         VIEW 1: EXPENSES (DEFAULT)
+         ====================================================================== -->
+    <main id="viewExpenses" class="tab-view-content active">
+      <!-- Budget Exceeded Alert Banner -->
+      <div id="budgetAlertBanner" class="alert-banner" role="alert"></div>
+
+      <!-- Clean Unified Summary Card -->
+      <section class="summary-hero-card">
+        <div class="summary-top-row">
+          <div class="summary-hero-stat">
+            <span class="summary-label">Total Spent This Month</span>
+            <div class="summary-hero-number" id="kpiTotalSpent">₹0.00</div>
+          </div>
+
+          <div class="summary-budget-group">
+            <div class="summary-budget-box">
+              <span class="summary-label">Monthly Budget</span>
+              <div class="summary-budget-val">
+                <span id="kpiBudget">₹25,000.00</span>
+                <button id="editBudgetBtn" class="btn-inline-edit" title="Edit Budget">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  Edit
+                </button>
+              </div>
+            </div>
+
+            <div class="summary-remaining-box">
+              <span class="summary-label" id="kpiRemainingLabel">Remaining Budget</span>
+              <div class="summary-remaining-val text-success" id="kpiRemaining">₹25,000.00</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Budget Progress Bar -->
+        <div class="budget-meter-wrap">
+          <div class="progress-track">
+            <div id="kpiProgressBar" class="progress-fill progress-green"></div>
+          </div>
+          <div class="budget-meter-labels">
+            <span id="kpiProgressText">0% of budget used</span>
+            <div class="hero-mini-stats">
+              <span><strong id="kpiTxCount">0</strong> transactions</span>
+              <span>•</span>
+              <span>Avg: <strong id="kpiAvgExpense">₹0.00</strong></span>
+              <span>•</span>
+              <span>Peak: <strong id="kpiHighestExpense">₹0.00</strong> <span id="kpiHighestItem"></span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Instant Category Filter Chips -->
+      <div class="category-chips-bar" id="categoryChipsBar">
+        <button class="chip-btn active" data-category="All">All</button>
+        <button class="chip-btn" data-category="Food">🍔 Food</button>
+        <button class="chip-btn" data-category="Travel">🚗 Travel</button>
+        <button class="chip-btn" data-category="Shopping">🛍️ Shopping</button>
+        <button class="chip-btn" data-category="Education">🎓 Education</button>
+        <button class="chip-btn" data-category="Entertainment">🎬 Entertainment</button>
+        <button class="chip-btn" data-category="Bills">⚡ Bills</button>
+        <button class="chip-btn" data-category="Health">❤️ Health</button>
+        <button class="chip-btn" data-category="Hostel">🏠 Hostel</button>
+        <button class="chip-btn" data-category="Personal">👤 Personal</button>
+        <button class="chip-btn" data-category="Other">••• Other</button>
+      </div>
+
+      <!-- Quick Search & Sort Bar -->
+      <section class="simple-search-bar">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search expenses by name, notes..." aria-label="Search Expenses">
+          <button id="clearSearchBtn" class="clear-search-btn" title="Clear Search" style="display: none;">&times;</button>
+        </div>
+
+        <div class="sort-wrapper">
+          <span class="sort-label">Sort:</span>
+          <select id="sortSelect" class="filter-select" aria-label="Sort Expenses">
+            <option value="date-desc">Newest First</option>
+            <option value="date-asc">Oldest First</option>
+            <option value="amount-desc">Highest Amount</option>
+            <option value="amount-asc">Lowest Amount</option>
+          </select>
+        </div>
+
+        <!-- Hidden filter selects for backward compatibility -->
+        <select id="filterCategory" style="display: none;"><option value="All">All Categories</option></select>
+        <select id="filterPayment" style="display: none;"><option value="All">All Payment Methods</option></select>
+        <button id="resetFiltersBtn" style="display: none;"></button>
+      </section>
+
+      <!-- Expenses Table & Mobile Card View -->
+      <section class="table-container" aria-label="Expense Log">
+        <!-- Desktop Table -->
+        <div class="table-wrapper" id="tableWrapper">
+          <table class="expense-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Item / Description</th>
+                <th>Category</th>
+                <th>Payment</th>
+                <th>Amount (₹)</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="expenseTableBody">
+              <!-- Dynamic rows rendered by ui.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Mobile Touch-friendly Card List -->
+        <div class="expense-card-list" id="expenseCardList">
+          <!-- Dynamic mobile cards rendered by ui.js -->
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="tableEmptyState" style="display: none;">
+          <div class="empty-icon-wrap">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </div>
+          <h3 class="empty-title">No expenses found</h3>
+          <p class="empty-desc">No purchases match your current filters. Add a new expense with the button below!</p>
+          <button class="btn-primary trigger-add-expense">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Add First Expense
+          </button>
+        </div>
+
+        <!-- Table Summary Footer -->
+        <div class="table-footer">
+          <span id="tableSummaryText">Showing 0 transactions</span>
+          <span>Hisabo • 100% Private Local Storage</span>
+        </div>
+      </section>
+    </main>
+
+    <!-- ======================================================================
+         VIEW 2: ANALYTICS & CHARTS
+         ====================================================================== -->
+    <section id="viewAnalytics" class="tab-view-content">
+      <div class="section-header">
+        <h2 class="section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Spending Insights & Visual Trends
+        </h2>
+      </div>
+
+      <div class="charts-grid">
+        <!-- 1. Expenses by Category -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Expenses by Category</h3>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 2. Expenses by Payment Method -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Payment Method Share</h3>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="paymentChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 3. Daily Spending Trend -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Daily Spending Trend</h3>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="dailyTrendChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 4. Monthly Expense Comparison -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Monthly Expense vs Budget</h3>
+          </div>
+          <div class="chart-canvas-container">
+            <canvas id="monthlyComparisonChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 3: TOOLS & BACKUP
+         ====================================================================== -->
+    <section id="viewTools" class="tab-view-content">
+      <div class="section-header">
+        <h2 class="section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Data Management & Tools
+        </h2>
+      </div>
+
+      <div class="tools-grid">
+        <!-- Export Card -->
+        <div class="tool-card">
+          <div class="tool-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <h3 class="tool-card-title">Export to CSV</h3>
+          <p class="tool-card-desc">Download all your logged expenses for the active month into a clean CSV spreadsheet.</p>
+          <button id="exportCsvBtn" class="btn-primary" style="width: 100%; justify-content: center;">
+            Download CSV
+          </button>
+        </div>
+
+        <!-- Import Card -->
+        <div class="tool-card">
+          <div class="tool-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <h3 class="tool-card-title">Import from CSV</h3>
+          <p class="tool-card-desc">Restore or bulk import expenses from Excel or another spreadsheet.</p>
+          <button id="importCsvBtn" class="btn-secondary" style="width: 100%; justify-content: center;">
+            Upload CSV File
+          </button>
+        </div>
+
+        <!-- Demo Data Card -->
+        <div class="tool-card">
+          <div class="tool-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          </div>
+          <h3 class="tool-card-title">Sample Demo Data</h3>
+          <p class="tool-card-desc">Load realistic sample purchases (Hostel, Swiggy, Metro, Bills) to explore all features.</p>
+          <button id="loadDemoDataBtn" class="btn-secondary" style="width: 100%; justify-content: center;">
+            Reload Demo Data
+          </button>
+        </div>
+
+        <!-- Clear Data Card -->
+        <div class="tool-card danger-card">
+          <div class="tool-card-icon" style="color: var(--danger); background: var(--danger-bg);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </div>
+          <h3 class="tool-card-title">Clear Expenses</h3>
+          <p class="tool-card-desc">Reset the current month or wipe all saved transaction records from the browser.</p>
+          <button id="clearDataTriggerBtn" class="btn-danger-outline" style="width: 100%; justify-content: center;">
+            Clear Expense Records
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Mobile Floating Action Button (FAB) -->
+    <button class="fab-add-btn trigger-add-expense" aria-label="Add Expense">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- ==========================================================================
+       MODALS: Streamlined & 1-Tap Friendly
+       ========================================================================== -->
+
+  <!-- Add / Edit Expense Modal -->
+  <div class="modal-backdrop" id="expenseModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" id="expenseModalTitle">Add New Expense</h3>
+        <button class="modal-close-btn" data-close-modal="expenseModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="expenseForm">
+        <div class="modal-body">
+          <!-- Big Prominent Amount Field -->
+          <div class="form-group">
+            <label class="form-label" for="expenseAmount">Amount (₹) *</label>
+            <div class="amount-input-wrap">
+              <span class="amount-currency-symbol">₹</span>
+              <input type="number" id="expenseAmount" name="expenseAmount" class="form-control amount-large-input" placeholder="0.00" step="0.01" min="0.01" required autofocus>
+            </div>
+          </div>
+
+          <!-- Item Name & Date in 2 columns -->
+          <div class="form-row-2">
+            <div class="form-group" style="flex: 2;">
+              <label class="form-label" for="expenseItem">What did you buy? *</label>
+              <input type="text" id="expenseItem" name="expenseItem" class="form-control" placeholder="e.g. Zomato Dinner, Metro, Coffee" required autocomplete="off">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label class="form-label" for="expenseDate">Date *</label>
+              <input type="date" id="expenseDate" name="expenseDate" class="form-control" required>
+            </div>
+          </div>
+
+          <!-- 1-Tap Category Selector Pills -->
+          <div class="form-group">
+            <label class="form-label">Category * (tap to select)</label>
+            <div class="pill-selector-grid" id="modalCategoryPills">
+              <!-- Dynamically populated interactive pills in ui.js -->
+            </div>
+            <!-- Hidden native select for form data -->
+            <select id="expenseCategory" name="expenseCategory" style="display: none;" required></select>
+          </div>
+
+          <!-- 1-Tap Payment Method Selector Pills -->
+          <div class="form-group">
+            <label class="form-label">Payment Method * (tap to select)</label>
+            <div class="pill-selector-grid-compact" id="modalPaymentPills">
+              <!-- Dynamically populated interactive pills in ui.js -->
+            </div>
+            <!-- Hidden native select for form data -->
+            <select id="expensePayment" name="expensePayment" style="display: none;" required></select>
+          </div>
+
+          <!-- Notes (Optional) -->
+          <div class="form-group">
+            <label class="form-label" for="expenseNotes">Notes / Description (Optional)</label>
+            <input type="text" id="expenseNotes" name="expenseNotes" class="form-control" placeholder="Add extra detail, who you paid, etc.">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="expenseModal">Cancel</button>
+          <button type="submit" id="expenseSubmitBtn" class="btn-primary" style="padding: 0.75rem 1.8rem;">Save Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Set Monthly Budget Modal -->
+  <div class="modal-backdrop" id="budgetModal">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Set Monthly Budget</h3>
+        <button class="modal-close-btn" data-close-modal="budgetModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="budgetForm">
+        <div class="modal-body">
+          <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+            Set your target spending budget for <strong id="budgetMonthLabel" style="color: var(--text-primary);">September 2026</strong>.
+          </p>
+          <div class="form-group">
+            <label class="form-label" for="budgetAmountInput">Monthly Budget Limit (₹) *</label>
+            <div class="amount-input-wrap">
+              <span class="amount-currency-symbol">₹</span>
+              <input type="number" id="budgetAmountInput" class="form-control amount-large-input" placeholder="25000" min="0" step="100" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="budgetModal">Cancel</button>
+          <button type="submit" class="btn-primary">Update Budget</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-backdrop" id="deleteConfirmModal">
+    <div class="modal-dialog" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Delete Expense?</h3>
+        <button class="modal-close-btn" data-close-modal="deleteConfirmModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Are you sure you want to delete this expense?
+        </p>
+        <div style="background: var(--bg-input); padding: 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div style="font-weight: 700; color: var(--text-primary);" id="deleteItemName">Item Name</div>
+          <div style="font-size: 1.15rem; font-weight: 800; color: var(--danger); margin-top: 2px;" id="deleteItemAmount">₹0.00</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" data-close-modal="deleteConfirmModal">Cancel</button>
+        <button type="button" id="confirmDeleteBtn" class="btn-danger-outline">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clear Month / All Modal -->
+  <div class="modal-backdrop" id="clearConfirmModal">
+    <div class="modal-dialog" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Clear Expense Data</h3>
+        <button class="modal-close-btn" data-close-modal="clearConfirmModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+          Select whether to clear expenses only for the selected active month or wipe all historical tracking data.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <button type="button" id="confirmClearMonthBtn" class="btn-secondary" style="justify-content: center; padding: 0.75rem;">
+            Clear Active Month Expenses
+          </button>
+          <button type="button" id="confirmClearAllBtn" class="btn-danger-outline" style="justify-content: center; padding: 0.75rem;">
+            Wipe All Historical Records
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" data-close-modal="clearConfirmModal">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSV Import Modal -->
+  <div class="modal-backdrop" id="importModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Import Expenses from CSV</h3>
+        <button class="modal-close-btn" data-close-modal="importModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Choose a CSV file containing your expenses with columns: <code>Date, Item, Amount, Payment Method, Category, Notes</code>.
+        </p>
+        <label for="csvFileInput" class="dropzone-box" style="display: block;">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--primary); margin: 0 auto 0.5rem auto;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div style="font-weight: 600; margin-bottom: 0.25rem;">Click to choose CSV file</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Compatible with Excel, Google Sheets, or Hisabo</div>
+          <input type="file" id="csvFileInput" accept=".csv,text/csv" style="display: none;">
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" data-close-modal="importModal">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme Palette Modal -->
+  <div class="modal-backdrop" id="themeModal">
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Choose Visual Theme</h3>
+        <button class="modal-close-btn" data-close-modal="themeModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Select an aesthetic visual theme for Hisabo. Changes apply instantly.
+        </p>
+        <div class="theme-palette-grid">
+          <!-- 1. Emerald Wealth -->
+          <button type="button" class="theme-card" data-set-theme="emerald">
+            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #050d0a 50%, #10b981 50%); border-color: #10b981;"></div>
+            <div class="theme-info">
+              <div class="theme-name">💎 Emerald Wealth <span style="font-size:0.75rem; color:#10b981; font-weight:600;">(Default)</span></div>
+              <div class="theme-desc">Deep jade obsidian with radiant emerald & golden accents</div>
+            </div>
+            <div class="theme-check-icon">✓</div>
+          </button>
+
+          <!-- 2. Midnight Cyber -->
+          <button type="button" class="theme-card" data-set-theme="midnight">
+            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #070913 50%, #6366f1 50%); border-color: #6366f1;"></div>
+            <div class="theme-info">
+              <div class="theme-name">🌌 Midnight Cyber</div>
+              <div class="theme-desc">Deep space obsidian with electric neon indigo & violet glow</div>
+            </div>
+            <div class="theme-check-icon">✓</div>
+          </button>
+
+          <!-- 3. Royal Amethyst -->
+          <button type="button" class="theme-card" data-set-theme="amethyst">
+            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #0b0714 50%, #a855f7 50%); border-color: #a855f7;"></div>
+            <div class="theme-info">
+              <div class="theme-name">🍇 Royal Amethyst</div>
+              <div class="theme-desc">Imperial velvet purple with neon magenta highlights</div>
+            </div>
+            <div class="theme-check-icon">✓</div>
+          </button>
+
+          <!-- 4. Ocean Sapphire -->
+          <button type="button" class="theme-card" data-set-theme="ocean">
+            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #040d1a 50%, #0284c7 50%); border-color: #0284c7;"></div>
+            <div class="theme-info">
+              <div class="theme-name">🌊 Ocean Sapphire</div>
+              <div class="theme-desc">Marine abyss navy with electric cyan & sky blue</div>
+            </div>
+            <div class="theme-check-icon">✓</div>
+          </button>
+
+          <!-- 5. Pearl Minimal -->
+          <button type="button" class="theme-card" data-set-theme="pearl">
+            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #f8fafc 50%, #059669 50%); border-color: #cbd5e1;"></div>
+            <div class="theme-info">
+              <div class="theme-name">☀️ Pearl Minimal</div>
+              <div class="theme-desc">Crisp, clean studio light mode with frosted glass cards</div>
+            </div>
+            <div class="theme-check-icon">✓</div>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-primary" data-close-modal="themeModal" style="width: 100%; justify-content: center;">Apply & Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- Main Application Script (ES Module) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
