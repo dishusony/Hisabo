@@ -5,7 +5,8 @@
   "description": "Hisabo - Smart Monthly Expense Tracker Web Application",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build": "echo Static build ready"
   },
   "keywords": ["expense-tracker", "finance", "budget", "calculator"],
   "author": "",
