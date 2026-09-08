@@ -538,3 +538,39 @@ export function updateAuthUI(user, store) {
   }
 }
 
+/**
+ * Updates real Gmail delivery status indicators in dashboard and tools view
+ */
+export function updateMailDeliveryUI(status, userEmail) {
+  const isConfigured = Boolean(status?.isConfigured);
+  const dot = document.getElementById('deliveryDot');
+  const text = document.getElementById('deliveryText');
+  const actionBtn = document.getElementById('deliveryActionBtn');
+  const statusTag = document.getElementById('toolsSmtpStatusTag');
+
+  if (dot) {
+    dot.classList.toggle('active', isConfigured);
+  }
+
+  if (text) {
+    if (isConfigured) {
+      const email = userEmail || status?.senderEmail || 'your Gmail';
+      text.innerHTML = `<strong>Real Delivery Active:</strong> Alerts will land in your Gmail inbox (${email}).`;
+    } else {
+      text.innerHTML = `<strong>Email Setup Required:</strong> Add Google App Password to receive real emails in your inbox.`;
+    }
+  }
+
+  if (actionBtn) {
+    actionBtn.innerHTML = isConfigured
+      ? `<span>Email Settings</span> <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`
+      : `<span>Activate Real Gmail</span> <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+  }
+
+  if (statusTag) {
+    statusTag.textContent = isConfigured ? 'Live Gmail Active' : 'Setup Required (Simulated)';
+    statusTag.classList.toggle('active', isConfigured);
+  }
+}
+
+

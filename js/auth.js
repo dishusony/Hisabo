@@ -60,6 +60,18 @@ class AuthService {
       }
     }
 
+    // Ensure backend JWT token is active for authenticated users
+    if (this.currentUser && typeof fetch !== 'undefined' && (!api.hasToken || !api.hasToken())) {
+      try {
+        await api.login({
+          email: this.currentUser.email,
+          name: this.currentUser.name
+        });
+      } catch (e) {
+        console.warn('[Auth] Background session restore note:', e.message);
+      }
+    }
+
     this.checkGsiLoaded();
     this.notify();
   }

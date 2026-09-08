@@ -207,6 +207,24 @@ class ApiService {
     return await this.request(`/api/budgets/alerts/${encodeURIComponent(monthKey)}`);
   }
 
+  async getMailStatus() {
+    return await this.request('/api/budgets/mail-status');
+  }
+
+  async configureMail(payload) {
+    return await this.request('/api/budgets/configure-mail', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  async checkBudgetAlerts(monthKey) {
+    return await this.request('/api/budgets/check-alerts', {
+      method: 'POST',
+      body: { monthKey }
+    });
+  }
+
   async sendTestEmail() {
     return await this.request('/api/budgets/test-email', { method: 'POST' });
   }

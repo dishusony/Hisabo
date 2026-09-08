@@ -5,6 +5,8 @@
  */
 
 import nodemailer from 'nodemailer';
+import fs from 'node:fs';
+import path from 'node:path';
 import { expenseDAO, budgetDAO, budgetAlertDAO } from '../db/db.js';
 
 /**
@@ -17,10 +19,112 @@ export function isGmailConfigured() {
     user &&
     pass &&
     !user.includes('your_gmail') &&
-    !pass.includes('your_app_password') &&
+    !pass.includes('your_16_char_app_password') &&
     user.trim().length > 0 &&
-    pass.trim().length > 0
+    pass.trim().length >= 10
   );
+}
+
+/**
+ * Returns configuration status and masked sender email
+ */
+export function getGmailConfigStatus() {
+  const configured = isGmailConfigured();
+  let masked = null;
+  if (process.env.GMAIL_USER && configured) {
+    const email = process.env.GMAIL_USER.trim();
+    const [name, domain] = email.split('@');
+    masked = (name.length > 2 ? name.substring(0, 2) + '***' : name) + '@' + (domain || 'gmail.com');
+  }
+  return {
+    isConfigured: configured,
+    senderEmail: masked
+  };
+}
+
+/**
+ * Persists Gmail credentials to .env file
+ */
+export function saveGmailCredentialsToEnv(gmailUser, appPassword) {
+  const cleanUser = gmailUser.trim().toLowerCase();
+  const cleanPass = appPassword.trim().replace(/\s+/g, '');
+  process.env.GMAIL_USER = cleanUser;
+  process.env.GMAIL_APP_PASSWORD = cleanPass;
+
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    let content = '';
+    if (fs.existsSync(envPath)) {
+      content = fs.readFileSync(envPath, 'utf8');
+    }
+
+    let userSet = false;
+    let passSet = false;
+    const lines = content ? content.split(/\r?\n/) : [];
+    const newLines = lines.map(line => {
+      if (/^\s*#?\s*GMAIL_USER\s*=/i.test(line)) {
+        userSet = true;
+        return `GMAIL_USER=${cleanUser}`;
+      }
+      if (/^\s*#?\s*GMAIL_APP_PASSWORD\s*=/i.test(line)) {
+        passSet = true;
+        return `GMAIL_APP_PASSWORD=${cleanPass}`;
+      }
+      return line;
+    });
+
+    if (!userSet) newLines.push(`GMAIL_USER=${cleanUser}`);
+    if (!passSet) newLines.push(`GMAIL_APP_PASSWORD=${cleanPass}`);
+
+    fs.writeFileSync(envPath, newLines.join('\n'), 'utf8');
+    console.log(`[Hisabo Mail] Saved GMAIL_USER=${cleanUser} into .env successfully.`);
+  } catch (err) {
+    console.error('[Hisabo Mail] Failed to write to .env:', err.message);
+  }
+
+  return { cleanUser, cleanPass };
+}
+
+/**
+ * Tests connection with Google SMTP and saves credentials if verified
+ */
+export async function verifyAndSaveGmailCredentials(gmailUser, appPassword) {
+  if (!gmailUser || !appPassword) {
+    throw new Error('Both Gmail address and 16-character App Password are required.');
+  }
+  const cleanUser = gmailUser.trim().toLowerCase();
+  const cleanPass = appPassword.trim().replace(/\s+/g, '');
+
+  if (!cleanUser.endsWith('@gmail.com') && !cleanUser.endsWith('@googlemail.com')) {
+    throw new Error('Only valid real Gmail addresses (@gmail.com) are supported for Gmail SMTP.');
+  }
+  if (cleanPass.length < 10) {
+    throw new Error('Google App Passwords are 16 characters (e.g. abcd efgh ijkl mnop). Please check your password.');
+  }
+
+  // Test transporter connection
+  const testTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: cleanUser,
+      pass: cleanPass
+    }
+  });
+
+  try {
+    await testTransporter.verify();
+  } catch (err) {
+    let reason = err.message;
+    if (reason.includes('535') || reason.includes('Username and Password not accepted') || reason.includes('BadCredentials')) {
+      reason = 'Google rejected the credentials. Please verify that 2-Step Verification is enabled and you generated a valid App Password from Google Account Security.';
+    }
+    throw new Error(reason);
+  }
+
+  // Persist to .env and process.env
+  saveGmailCredentialsToEnv(cleanUser, cleanPass);
+
+  return { success: true, user: cleanUser };
 }
 
 /**
@@ -35,7 +139,7 @@ function createTransporter() {
     service: 'gmail',
     auth: {
       user: process.env.GMAIL_USER.trim(),
-      pass: process.env.GMAIL_APP_PASSWORD.trim()
+      pass: process.env.GMAIL_APP_PASSWORD.trim().replace(/\s+/g, '')
     }
   });
 }
@@ -321,9 +425,13 @@ export async function checkAndTriggerBudgetAlerts(userId, monthKey, userEmail, u
   const thresholds = [50, 90, 100];
   const alertsTriggered = [];
 
+  const realMailActive = isGmailConfigured();
+
   for (const threshold of thresholds) {
     if (percent >= threshold) {
-      const alreadySent = budgetAlertDAO.hasAlertBeenSent(userId, monthKey, threshold);
+      // If real mail is active, check if a REAL email was sent (is_simulated = 0)
+      // If real mail is inactive, check if simulation was already recorded to avoid terminal spam
+      const alreadySent = budgetAlertDAO.hasAlertBeenSent(userId, monthKey, threshold, !realMailActive);
       if (!alreadySent) {
         // Send email
         const mailResult = await sendBudgetAlert({
@@ -335,14 +443,15 @@ export async function checkAndTriggerBudgetAlerts(userId, monthKey, userEmail, u
           budgetAmount
         });
 
-        // Record in database so it is not sent again for this month & threshold
+        // Record in database with accurate simulation status
         budgetAlertDAO.recordAlert({
           userId,
           monthKey,
           threshold,
           spentAmount,
           budgetAmount,
-          recipientEmail: userEmail
+          recipientEmail: userEmail,
+          isSimulated: mailResult.simulated ? 1 : 0
         });
 
         alertsTriggered.push({

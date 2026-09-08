@@ -18,7 +18,8 @@ import {
   showToast,
   formatCurrency,
   formatMonthName,
-  updateAuthUI
+  updateAuthUI,
+  updateMailDeliveryUI
 } from './ui.js';
 
 class AppController {
@@ -37,6 +38,19 @@ class AppController {
     this.initAuth();
     this.initEventListeners();
     this.render();
+    setTimeout(() => this.checkMailStatus(), 400);
+  }
+
+  async checkMailStatus() {
+    if (typeof fetch === 'undefined') return;
+    try {
+      if (api.hasToken && api.hasToken()) {
+        const status = await api.getMailStatus();
+        updateMailDeliveryUI(status, authService.getCurrentUser()?.email);
+      }
+    } catch (e) {
+      // Backend not reached or token pending
+    }
   }
 
   setAuthMode(mode = 'login') {
@@ -105,6 +119,7 @@ class AppController {
       if (user) {
         closeModal('authModal');
         await store.syncWithBackend();
+        this.checkMailStatus();
         this.render();
       } else {
         // Enforce Entrance Gate: only valid email can enter
@@ -511,6 +526,90 @@ class AppController {
           showToast(err.message, 'error');
         }
       });
+    });
+
+    // Real Gmail Delivery Configuration Modal Handlers
+    const openMailConfig = () => {
+      const user = authService.getCurrentUser();
+      const emailInput = document.getElementById('cfgSenderEmail');
+      const errorBox = document.getElementById('mailConfigError');
+      if (emailInput && user?.email) {
+        emailInput.value = user.email;
+      }
+      if (errorBox) {
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+      }
+      openModal('mailConfigModal');
+    };
+
+    document.getElementById('deliveryActionBtn')?.addEventListener('click', openMailConfig);
+    document.getElementById('configureMailTriggerBtn')?.addEventListener('click', openMailConfig);
+    document.getElementById('toolsConfigureMailBtn')?.addEventListener('click', openMailConfig);
+
+    // Save and verify Gmail SMTP Credentials
+    document.getElementById('mailConfigForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const emailInput = document.getElementById('cfgSenderEmail');
+      const passInput = document.getElementById('cfgAppPassword');
+      const sendTestCheck = document.getElementById('cfgSendTestNow');
+      const errorBox = document.getElementById('mailConfigError');
+      const submitBtn = document.getElementById('saveMailConfigBtn');
+
+      const gmailUser = (emailInput?.value || '').trim();
+      const gmailAppPassword = (passInput?.value || '').trim();
+      const sendTestNow = Boolean(sendTestCheck?.checked);
+
+      if (!authService.validateGmail(gmailUser)) {
+        if (errorBox) {
+          errorBox.textContent = '❌ Only valid real Gmail addresses (@gmail.com) are supported.';
+          errorBox.style.display = 'block';
+        }
+        return;
+      }
+
+      if (!gmailAppPassword || gmailAppPassword.replace(/\s+/g, '').length < 10) {
+        if (errorBox) {
+          errorBox.textContent = '❌ Google App Passwords are 16 characters (e.g. abcd efgh ijkl mnop).';
+          errorBox.style.display = 'block';
+        }
+        return;
+      }
+
+      if (errorBox) errorBox.style.display = 'none';
+
+      const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = 'Connecting to Google SMTP & Verifying...';
+      }
+
+      try {
+        const res = await api.configureMail({
+          gmailUser,
+          gmailAppPassword,
+          sendTestNow
+        });
+
+        closeModal('mailConfigModal');
+        showToast(`🎉 Real Gmail Delivery Activated! Live alerts will reach ${gmailUser}.`);
+        if (res.alertsTriggered?.length) {
+          showToast(`⚡ Dispatched ${res.alertsTriggered.length} pending budget alert(s) to your inbox!`);
+        }
+        await this.checkMailStatus();
+        this.render();
+      } catch (err) {
+        if (errorBox) {
+          errorBox.textContent = `❌ ${err.message}`;
+          errorBox.style.display = 'block';
+        }
+        showToast(err.message, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnText;
+        }
+      }
     });
 
     // Test Gmail Alert Notification Handlers

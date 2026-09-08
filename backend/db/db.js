@@ -80,12 +80,20 @@ db.exec(`
     spent_amount REAL NOT NULL,
     budget_amount REAL NOT NULL,
     recipient_email TEXT NOT NULL,
+    is_simulated INTEGER DEFAULT 0,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(user_id, month_key, threshold)
   );
 
   CREATE INDEX IF NOT EXISTS idx_budget_alerts_user_month ON budget_alerts(user_id, month_key);
 `);
+
+// Migration: Ensure is_simulated column exists in older schemas
+try {
+  db.exec('ALTER TABLE budget_alerts ADD COLUMN is_simulated INTEGER DEFAULT 0;');
+} catch (e) {
+  // Column already exists
+}
 
 console.log('[Hisabo DB] SQLite Database initialized at:', dbPath);
 
@@ -381,19 +389,31 @@ export const budgetDAO = {
 };
 
 export const budgetAlertDAO = {
-  hasAlertBeenSent(userId, monthKey, threshold) {
-    const stmt = db.prepare('SELECT id FROM budget_alerts WHERE user_id = ? AND month_key = ? AND threshold = ?');
+  hasAlertBeenSent(userId, monthKey, threshold, allowSimulated = false) {
+    if (allowSimulated) {
+      const stmt = db.prepare('SELECT id FROM budget_alerts WHERE user_id = ? AND month_key = ? AND threshold = ?');
+      const res = stmt.get(userId, monthKey, threshold);
+      return Boolean(res);
+    }
+    // Only return true if a REAL email was sent (is_simulated = 0 or is_simulated IS NULL)
+    const stmt = db.prepare('SELECT id FROM budget_alerts WHERE user_id = ? AND month_key = ? AND threshold = ? AND (is_simulated = 0 OR is_simulated IS NULL)');
     const res = stmt.get(userId, monthKey, threshold);
     return Boolean(res);
   },
 
-  recordAlert({ userId, monthKey, threshold, spentAmount, budgetAmount, recipientEmail }) {
+  recordAlert({ userId, monthKey, threshold, spentAmount, budgetAmount, recipientEmail, isSimulated = 0 }) {
     const id = 'alt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO budget_alerts (id, user_id, month_key, threshold, sent_at, spent_amount, budget_amount, recipient_email)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO budget_alerts (id, user_id, month_key, threshold, sent_at, spent_amount, budget_amount, recipient_email, is_simulated)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, month_key, threshold) DO UPDATE SET
+        sent_at = excluded.sent_at,
+        spent_amount = excluded.spent_amount,
+        budget_amount = excluded.budget_amount,
+        recipient_email = excluded.recipient_email,
+        is_simulated = excluded.is_simulated
     `);
-    stmt.run(id, userId, monthKey, threshold, Date.now(), spentAmount, budgetAmount, recipientEmail);
+    stmt.run(id, userId, monthKey, threshold, Date.now(), spentAmount, budgetAmount, recipientEmail, isSimulated ? 1 : 0);
     return id;
   },
 
@@ -408,13 +428,19 @@ export const budgetAlertDAO = {
       sentAt: r.sent_at,
       spentAmount: r.spent_amount,
       budgetAmount: r.budget_amount,
-      recipientEmail: r.recipient_email
+      recipientEmail: r.recipient_email,
+      isSimulated: Boolean(r.is_simulated)
     }));
   },
 
   resetAlertsForMonth(userId, monthKey) {
     const stmt = db.prepare('DELETE FROM budget_alerts WHERE user_id = ? AND month_key = ?');
     stmt.run(userId, monthKey);
+  },
+
+  clearSimulatedAlerts(userId) {
+    const stmt = db.prepare('DELETE FROM budget_alerts WHERE user_id = ? AND is_simulated = 1');
+    return stmt.run(userId);
   }
 };
 

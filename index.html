@@ -215,6 +215,19 @@
               <span>Test Gmail Alert</span>
             </button>
           </div>
+
+          <!-- Real Gmail Delivery Status & Quick Action Banner -->
+          <div class="budget-delivery-banner" id="budgetDeliveryBanner">
+            <div class="delivery-status-left">
+              <span class="delivery-dot" id="deliveryDot"></span>
+              <span class="delivery-text" id="deliveryText">Checking real Gmail delivery status...</span>
+            </div>
+            <button type="button" id="deliveryActionBtn" class="btn-delivery-action">
+              <span>Activate Real Gmail</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
           <div class="budget-meter-labels">
             <span id="kpiProgressText">0% of budget used</span>
             <div class="hero-mini-stats">
@@ -439,11 +452,15 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
           </div>
           <h3 class="tool-card-title">Gmail Budget Alerts</h3>
-          <p class="tool-card-desc">Automated email alerts sent directly via Gmail SMTP when spending reaches 50%, 90%, and 100% of your budget.</p>
+          <p class="tool-card-desc">Automated email notifications delivered directly to your inbox when monthly spending crosses 50%, 90%, and 100%.</p>
           <div class="tools-alert-meta">
             <div class="alert-recipient-row">
-              <span class="meta-label">Recipient:</span>
+              <span class="recipient-label">Recipient:</span>
               <span class="meta-email" id="toolsAlertEmailDisplay">user@example.com</span>
+            </div>
+            <div class="alert-recipient-row">
+              <span class="recipient-label">Delivery Mode:</span>
+              <span class="meta-status-tag" id="toolsSmtpStatusTag">Setup Required</span>
             </div>
             <div class="milestones-pill-row">
               <span class="milestone-status-pill" id="toolsPill50">50% Halfway</span>
@@ -451,10 +468,14 @@
               <span class="milestone-status-pill" id="toolsPill100">100% Limit</span>
             </div>
           </div>
-          <button id="toolsSendTestEmailBtn" class="btn-secondary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            <span>Send Test Budget Alert</span>
-          </button>
+          <div class="tools-mail-actions-row">
+            <button type="button" id="toolsConfigureMailBtn" class="btn-primary" style="flex: 1; justify-content: center; font-size: 0.82rem;">
+              Configure Gmail Delivery
+            </button>
+            <button type="button" id="toolsSendTestEmailBtn" class="btn-secondary" style="flex: 1; justify-content: center; font-size: 0.82rem;">
+              Send Test Alert
+            </button>
+          </div>
         </div>
 
         <!-- Clear Data Card -->
@@ -617,6 +638,79 @@
           100% Private. Your credentials & data remain locally secured in your browser.
         </span>
       </div>
+    </div>
+  </div>
+
+  <!-- Configure Real Gmail SMTP Modal -->
+  <div class="modal-backdrop" id="mailConfigModal">
+    <div class="modal-dialog" style="max-width: 500px;">
+      <div class="modal-header">
+        <div class="modal-header-brand">
+          <div class="auth-brand-badge" style="background: rgba(234, 67, 53, 0.12); color: #ea4335;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Activate Real Gmail Alerts</h3>
+            <p class="modal-subtitle">Enable live inbox delivery for 50%, 90%, and 100% budget alerts</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" data-close-modal="mailConfigModal" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="mailConfigForm" novalidate>
+        <div class="modal-body">
+          <div class="mail-instruction-box">
+            <div class="instruction-header">
+              <span class="badge-step">Required for Real Inbox Delivery</span>
+              <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" class="app-pass-link">
+                <span>Google App Passwords</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.4rem 0 0.5rem 0; line-height: 1.4;">
+              Google prohibits raw account passwords. To send real emails, generate a free <strong>16-character App Password</strong>:
+            </p>
+            <ol class="app-pass-steps">
+              <li>Turn on <strong>2-Step Verification</strong> in your Google Account.</li>
+              <li>Open <strong>App Passwords</strong> and name it <strong>Hisabo</strong>.</li>
+              <li>Paste the 16 characters below (spaces are automatically cleaned).</li>
+            </ol>
+          </div>
+
+          <div id="mailConfigError" class="auth-error-alert" style="display: none;"></div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfgSenderEmail">Sender Gmail Address *</label>
+            <div class="input-with-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <input type="email" id="cfgSenderEmail" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
+            </div>
+            <span class="input-subhint">This Gmail account will authenticate and send the alert emails to your inbox.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfgAppPassword">16-Character Google App Password *</label>
+            <div class="input-with-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" id="cfgAppPassword" class="form-control" placeholder="e.g. abcd efgh ijkl mnop" required autocomplete="off">
+            </div>
+            <span class="input-subhint">Stored securely in your local environment file (.env). Never committed to GitHub.</span>
+          </div>
+
+          <div class="form-check-group" style="margin-top: 0.85rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-primary); cursor: pointer;">
+              <input type="checkbox" id="cfgSendTestNow" checked style="accent-color: var(--primary);">
+              <span>Send a test verification email to my inbox immediately</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="mailConfigModal">Cancel</button>
+          <button type="submit" id="saveMailConfigBtn" class="btn-primary">
+            Activate &amp; Verify Delivery
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
