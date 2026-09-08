@@ -474,7 +474,91 @@ h1, h2, h3, h4, h5, h6 {
 
 .progress-green { background: linear-gradient(90deg, #10b981, #059669); }
 .progress-amber { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.progress-orange { background: linear-gradient(90deg, #f97316, #ea580c); }
 .progress-red { background: linear-gradient(90deg, #ef4444, #dc2626); }
+
+/* Milestone Markers Row (50%, 90%, 100%) */
+.budget-milestones-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+
+.milestone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  transition: var(--transition-fast);
+  cursor: default;
+}
+
+.milestone-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+#milestone50.reached {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.45);
+}
+#milestone50.reached .milestone-dot { opacity: 1; box-shadow: 0 0 6px #f59e0b; }
+
+#milestone90.reached {
+  background: rgba(249, 115, 22, 0.18);
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.5);
+}
+#milestone90.reached .milestone-dot { opacity: 1; box-shadow: 0 0 6px #f97316; }
+
+#milestone100.reached {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.55);
+  animation: pulseMilestoneRed 2s infinite ease-in-out;
+}
+#milestone100.reached .milestone-dot { opacity: 1; box-shadow: 0 0 8px #ef4444; }
+
+@keyframes pulseMilestoneRed {
+  0%, 100% { box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+}
+
+.milestone-mail-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.milestone-mail-btn:hover {
+  color: #ffffff;
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+}
 
 .budget-meter-labels {
   display: flex;
@@ -496,23 +580,36 @@ h1, h2, h3, h4, h5, h6 {
 /* Alert Banner */
 .alert-banner {
   display: none;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1.25rem;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.95rem 1.35rem;
   border-radius: var(--radius-md);
   margin-bottom: 1.25rem;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.alert-title {
+  font-weight: 700;
+  font-size: 0.94rem;
+  margin-bottom: 0.2rem;
 }
 
 .alert-danger {
   background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.35);
   color: #fca5a5;
+}
+
+.alert-orange {
+  background: rgba(249, 115, 22, 0.14);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  color: #fdba74;
 }
 
 .alert-warning {
   background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid rgba(245, 158, 11, 0.35);
   color: #fcd34d;
 }
 
@@ -1949,4 +2046,113 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Entrance Gate & Strict Validation Styles
+   ========================================================================== */
+.gate-security-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #c7d2fe;
+}
+
+.gate-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.auth-error-alert {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: var(--radius-sm);
+  color: #fca5a5;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+  animation: shakeError 300ms ease;
+}
+
+@keyframes shakeError {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.form-input-error {
+  border-color: #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+.input-subhint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+
+/* ==========================================================================
+   Gmail Budget Alerts Card (Tools View)
+   ========================================================================== */
+.email-alerts-card {
+  border-color: rgba(234, 67, 53, 0.25);
+  background: linear-gradient(180deg, var(--bg-card) 0%, rgba(234, 67, 53, 0.03) 100%);
+}
+
+.tools-alert-meta {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.85rem;
+  margin: 0.85rem 0;
+}
+
+.alert-recipient-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  margin-bottom: 0.55rem;
+}
+
+.recipient-label {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.meta-email {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.milestones-pill-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.milestone-status-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
 

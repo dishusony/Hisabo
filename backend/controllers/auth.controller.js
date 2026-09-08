@@ -16,6 +16,53 @@ function decodeGoogleJwt(token) {
   }
 }
 
+/**
+ * Strict RFC 5322 & domain structure email validation
+ * Rejects malformed addresses, consecutive dots, missing or invalid TLDs, and spaces.
+ */
+export function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const clean = email.trim();
+  if (clean.length > 254 || clean.length < 5) return false;
+
+  // Disallow any whitespace
+  if (/\s/.test(clean)) return false;
+
+  // Single @ symbol separating local and domain parts
+  const parts = clean.split('@');
+  if (parts.length !== 2) return false;
+
+  const [localPart, domainPart] = parts;
+  if (!localPart || !domainPart) return false;
+  if (localPart.length > 64) return false;
+
+  // Local part rules: no leading/trailing dot, no consecutive dots
+  if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.includes('..')) {
+    return false;
+  }
+  const localRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  if (!localRegex.test(localPart)) return false;
+
+  // Domain part rules: no leading/trailing dot, no consecutive dots
+  if (domainPart.startsWith('.') || domainPart.endsWith('.') || domainPart.includes('..')) {
+    return false;
+  }
+  const domainLabels = domainPart.split('.');
+  if (domainLabels.length < 2) return false;
+
+  for (const label of domainLabels) {
+    if (!label || label.length > 63) return false;
+    if (label.startsWith('-') || label.endsWith('-')) return false;
+    if (!/^[a-zA-Z0-9-]+$/.test(label)) return false;
+  }
+
+  // TLD (last label) must be alphabetical and at least 2 characters
+  const tld = domainLabels[domainLabels.length - 1];
+  if (!/^[a-zA-Z]{2,}$/.test(tld)) return false;
+
+  return true;
+}
+
 export const authController = {
   getConfig(req, res) {
     res.json({
@@ -30,20 +77,22 @@ export const authController = {
 
     if (credential) {
       const payload = decodeGoogleJwt(credential);
-      if (!payload || !payload.email) {
-        return res.status(400).json({ error: 'Invalid Google credential token' });
+      if (!payload || !payload.email || !isValidEmail(payload.email)) {
+        return res.status(400).json({ error: 'Invalid Google credential token or email address' });
       }
       userProfile = {
         id: payload.sub || ('g_' + Date.now()),
-        email: payload.email,
+        email: payload.email.toLowerCase().trim(),
         name: payload.name || payload.given_name || payload.email.split('@')[0],
         picture: payload.picture || '',
         provider: 'google'
       };
     } else if (email) {
       const cleanEmail = email.trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-        return res.status(400).json({ error: 'Please provide a valid email address' });
+      if (!isValidEmail(cleanEmail)) {
+        return res.status(400).json({
+          error: 'Only valid email addresses are permitted (e.g. name@example.com). Please check your email and try again.'
+        });
       }
       const displayName = (name || '').trim() || cleanEmail.split('@')[0];
       userProfile = {
@@ -54,7 +103,7 @@ export const authController = {
         provider: 'google'
       };
     } else {
-      return res.status(400).json({ error: 'Email or Google credential is required' });
+      return res.status(400).json({ error: 'A valid email address is required to enter Hisabo.' });
     }
 
     // Upsert user in database

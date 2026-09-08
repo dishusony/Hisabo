@@ -70,6 +70,21 @@ db.exec(`
     PRIMARY KEY (user_id, month_key),
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS budget_alerts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    threshold INTEGER NOT NULL,
+    sent_at INTEGER NOT NULL,
+    spent_amount REAL NOT NULL,
+    budget_amount REAL NOT NULL,
+    recipient_email TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, month_key, threshold)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_budget_alerts_user_month ON budget_alerts(user_id, month_key);
 `);
 
 console.log('[Hisabo DB] SQLite Database initialized at:', dbPath);
@@ -99,14 +114,14 @@ export const userDAO = {
         SET name = ?, picture = ?, last_login = CURRENT_TIMESTAMP 
         WHERE id = ?
       `);
-      stmt.run(name || existing.name, picture || existing.picture, existing.id);
+      stmt.run(name || existing.name || null, picture || existing.picture || null, existing.id);
       return this.findById(existing.id);
     } else {
       const stmt = db.prepare(`
         INSERT INTO users (id, email, name, picture, provider, created_at, last_login)
         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
-      stmt.run(id, cleanEmail, name, picture, provider);
+      stmt.run(id, cleanEmail, name || null, picture || null, provider || 'google');
       return this.findById(id);
     }
   }
@@ -362,6 +377,44 @@ export const budgetDAO = {
     const val = Math.round(parseFloat(amount));
     stmt.run(userId, monthKey, val, Date.now());
     return { monthKey, amount: val };
+  }
+};
+
+export const budgetAlertDAO = {
+  hasAlertBeenSent(userId, monthKey, threshold) {
+    const stmt = db.prepare('SELECT id FROM budget_alerts WHERE user_id = ? AND month_key = ? AND threshold = ?');
+    const res = stmt.get(userId, monthKey, threshold);
+    return Boolean(res);
+  },
+
+  recordAlert({ userId, monthKey, threshold, spentAmount, budgetAmount, recipientEmail }) {
+    const id = 'alt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO budget_alerts (id, user_id, month_key, threshold, sent_at, spent_amount, budget_amount, recipient_email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, userId, monthKey, threshold, Date.now(), spentAmount, budgetAmount, recipientEmail);
+    return id;
+  },
+
+  getAlertsForMonth(userId, monthKey) {
+    const stmt = db.prepare('SELECT * FROM budget_alerts WHERE user_id = ? AND month_key = ? ORDER BY threshold ASC');
+    const rows = stmt.all(userId, monthKey);
+    return rows.map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      monthKey: r.month_key,
+      threshold: r.threshold,
+      sentAt: r.sent_at,
+      spentAmount: r.spent_amount,
+      budgetAmount: r.budget_amount,
+      recipientEmail: r.recipient_email
+    }));
+  },
+
+  resetAlertsForMonth(userId, monthKey) {
+    const stmt = db.prepare('DELETE FROM budget_alerts WHERE user_id = ? AND month_key = ?');
+    stmt.run(userId, monthKey);
   }
 };
 

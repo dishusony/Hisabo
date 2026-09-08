@@ -202,6 +202,14 @@ class ApiService {
     const query = monthKey ? `?month=${encodeURIComponent(monthKey)}` : '';
     return await this.request(`/api/analytics/kpis${query}`);
   }
+
+  async getBudgetAlerts(monthKey) {
+    return await this.request(`/api/budgets/alerts/${encodeURIComponent(monthKey)}`);
+  }
+
+  async sendTestEmail() {
+    return await this.request('/api/budgets/test-email', { method: 'POST' });
+  }
 }
 
 export const api = new ApiService();

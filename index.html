@@ -199,6 +199,22 @@
           <div class="progress-track">
             <div id="kpiProgressBar" class="progress-fill progress-green"></div>
           </div>
+          <!-- Milestone Markers for 50%, 90%, and 100% Alerts -->
+          <div class="budget-milestones-bar" id="budgetMilestonesBar">
+            <span class="milestone-badge" id="milestone50" title="Milestone: 50% budget threshold reached">
+              <span class="milestone-dot"></span> 50% Alert
+            </span>
+            <span class="milestone-badge" id="milestone90" title="Warning: 90% budget threshold reached">
+              <span class="milestone-dot"></span> 90% Alert
+            </span>
+            <span class="milestone-badge" id="milestone100" title="Critical: 100% budget limit reached">
+              <span class="milestone-dot"></span> 100% Alert
+            </span>
+            <button type="button" id="quickTestMailBtn" class="milestone-mail-btn" title="Send a test budget notification email via Gmail">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <span>Test Gmail Alert</span>
+            </button>
+          </div>
           <div class="budget-meter-labels">
             <span id="kpiProgressText">0% of budget used</span>
             <div class="hero-mini-stats">
@@ -417,6 +433,30 @@
           </button>
         </div>
 
+        <!-- Gmail Budget Milestone Alerts Card (50%, 90%, 100%) -->
+        <div class="tool-card email-alerts-card">
+          <div class="tool-card-icon" style="color: #ea4335; background: rgba(234, 67, 53, 0.12);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <h3 class="tool-card-title">Gmail Budget Alerts</h3>
+          <p class="tool-card-desc">Automated email alerts sent directly via Gmail SMTP when spending reaches 50%, 90%, and 100% of your budget.</p>
+          <div class="tools-alert-meta">
+            <div class="alert-recipient-row">
+              <span class="meta-label">Recipient:</span>
+              <span class="meta-email" id="toolsAlertEmailDisplay">user@example.com</span>
+            </div>
+            <div class="milestones-pill-row">
+              <span class="milestone-status-pill" id="toolsPill50">50% Halfway</span>
+              <span class="milestone-status-pill" id="toolsPill90">90% Warning</span>
+              <span class="milestone-status-pill" id="toolsPill100">100% Limit</span>
+            </div>
+          </div>
+          <button id="toolsSendTestEmailBtn" class="btn-secondary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span>Send Test Budget Alert</span>
+          </button>
+        </div>
+
         <!-- Clear Data Card -->
         <div class="tool-card danger-card">
           <div class="tool-card-icon" style="color: var(--danger); background: var(--danger-bg);">
@@ -441,7 +481,7 @@
        MODALS: Streamlined & 1-Tap Friendly
        ========================================================================== -->
 
-  <!-- Sign in with Gmail & Google Modal -->
+  <!-- Sign in & Entrance Gate Modal (Strict Email Validation) -->
   <div class="modal-backdrop" id="authModal">
     <div class="modal-dialog auth-dialog" style="max-width: 480px;">
       <div class="modal-header">
@@ -455,25 +495,35 @@
             </svg>
           </div>
           <div>
-            <h3 class="modal-title">Sign in to Hisabo</h3>
-            <p class="modal-subtitle">Connect your Gmail or Google Account to track expenses</p>
+            <h3 class="modal-title" id="authModalTitle">Welcome to Hisabo</h3>
+            <p class="modal-subtitle" id="authModalSubtitle">Only valid email addresses can enter &amp; receive budget alerts</p>
           </div>
         </div>
-        <button class="modal-close-btn" data-close-modal="authModal" aria-label="Close dialog">&times;</button>
+        <button class="modal-close-btn" id="authModalCloseBtn" data-close-modal="authModal" aria-label="Close dialog">&times;</button>
       </div>
 
       <div class="modal-body">
+        <!-- Entry Gate Strict Banner when unauthenticated -->
+        <div class="gate-security-banner" id="entranceGateBanner">
+          <div class="gate-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div class="gate-text">
+            <strong>Entrance Gate Active:</strong> Enter your valid email address to unlock your expense dashboard and enable automatic 50%, 90%, and 100% budget milestone alerts via Gmail.
+          </div>
+        </div>
+
         <!-- Official Google Sign-In Container (GSI) -->
         <div class="gsi-container" id="gsiContainer">
           <div id="gsiButtonWrapper" class="gsi-button-wrapper"></div>
           <div class="auth-divider" id="gsiDivider" style="display: none;"><span>OR SIGN IN DIRECTLY</span></div>
         </div>
 
-        <!-- 1-Tap Quick Gmail Demo Accounts -->
+        <!-- 1-Tap Quick Gmail Verified Demo Accounts -->
         <div class="quick-login-section">
           <label class="form-label" style="margin-bottom: 0.55rem; display: flex; justify-content: space-between; align-items: center;">
-            <span>1-Tap Instant Sign In</span>
-            <span style="font-size: 0.72rem; color: var(--primary); font-weight: 600;">Fast Demo</span>
+            <span>1-Tap Instant Entry (Valid Accounts)</span>
+            <span style="font-size: 0.72rem; color: var(--primary); font-weight: 600;">Verified Demo</span>
           </label>
           <div class="quick-accounts-grid">
             <button type="button" class="quick-account-btn" data-demo-email="ms.dhoni7@gmail.com" data-demo-name="MS Dhoni">
@@ -495,16 +545,19 @@
           </div>
         </div>
 
-        <div class="auth-divider"><span>OR ENTER ANY GMAIL</span></div>
+        <div class="auth-divider"><span>OR ENTER VALID EMAIL</span></div>
 
-        <!-- Direct Gmail Entry Form -->
-        <form id="gmailLoginForm" class="gmail-form">
+        <!-- Direct Email Entry Form (Strict Validation) -->
+        <form id="gmailLoginForm" class="gmail-form" novalidate>
+          <div id="gmailInputError" class="auth-error-alert" style="display: none;"></div>
+
           <div class="form-group">
-            <label class="form-label" for="gmailInput">Your Gmail Address *</label>
+            <label class="form-label" for="gmailInput">Valid Email Address *</label>
             <div class="input-with-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <input type="email" id="gmailInput" class="form-control" placeholder="e.g. ms.dhoni7@gmail.com" required autocomplete="email">
+              <input type="email" id="gmailInput" class="form-control" placeholder="e.g. yourname@gmail.com" required autocomplete="email">
             </div>
+            <span class="input-subhint">Must be a valid email format (RFC 5322 compliant, valid domain &amp; TLD).</span>
           </div>
 
           <div class="form-group">
@@ -515,8 +568,8 @@
             </div>
           </div>
 
-          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 0.95rem;">
-            Continue with Gmail
+          <button type="submit" id="gmailSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 0.95rem;">
+            Verify Email &amp; Enter Hisabo
           </button>
         </form>
 

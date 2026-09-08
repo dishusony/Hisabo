@@ -4,6 +4,7 @@
  */
 
 import { CATEGORIES, PAYMENT_METHODS } from './store.js';
+import { authService } from './auth.js';
 
 // SVG Icons mapping for offline & crisp rendering
 const ICONS = {
@@ -160,10 +161,12 @@ export function updateDashboardKPIs(kpis) {
     const pct = Math.min(kpis.actualPercent, 100);
     progressBarEl.style.width = `${pct}%`;
 
-    progressBarEl.classList.remove('progress-green', 'progress-amber', 'progress-red');
-    if (kpis.isOverBudget) {
+    progressBarEl.classList.remove('progress-green', 'progress-amber', 'progress-orange', 'progress-red');
+    if (kpis.is100PercentReached) {
       progressBarEl.classList.add('progress-red');
-    } else if (kpis.isNearBudget) {
+    } else if (kpis.is90PercentReached) {
+      progressBarEl.classList.add('progress-orange');
+    } else if (kpis.is50PercentReached) {
       progressBarEl.classList.add('progress-amber');
     } else {
       progressBarEl.classList.add('progress-green');
@@ -172,24 +175,51 @@ export function updateDashboardKPIs(kpis) {
     progressTextEl.textContent = `${kpis.actualPercent}% of budget used`;
   }
 
-  // Budget Alert Banner
+  // Update milestone marker chips
+  const m50 = document.getElementById('milestone50');
+  const m90 = document.getElementById('milestone90');
+  const m100 = document.getElementById('milestone100');
+
+  if (m50) {
+    m50.classList.toggle('reached', Boolean(kpis.is50PercentReached));
+  }
+  if (m90) {
+    m90.classList.toggle('reached', Boolean(kpis.is90PercentReached));
+  }
+  if (m100) {
+    m100.classList.toggle('reached', Boolean(kpis.is100PercentReached));
+  }
+
+  // Budget Alert Banner (50%, 90%, 100% thresholds)
   if (alertBannerEl) {
-    if (kpis.isOverBudget) {
-      const overBy = Math.abs(kpis.remaining);
+    if (kpis.is100PercentReached) {
+      const overBy = Math.max(0, kpis.totalSpent - kpis.budget);
       alertBannerEl.className = 'alert-banner alert-danger';
       alertBannerEl.innerHTML = `
         <div class="alert-icon">${ICONS.alertTriangle}</div>
         <div class="alert-content">
-          <strong>Budget Exceeded!</strong> You have exceeded your monthly budget by <strong>${formatCurrency(overBy)}</strong> (${kpis.actualPercent}% spent).
+          <div class="alert-title">🛑 100% Budget Limit Reached / Exceeded</div>
+          <div>You have consumed <strong>${kpis.actualPercent}%</strong> of your monthly budget${overBy > 0 ? ` (over by <strong>${formatCurrency(overBy)}</strong>)` : ''}. Automated Gmail alert notification dispatched.</div>
         </div>
       `;
       alertBannerEl.style.display = 'flex';
-    } else if (kpis.isNearBudget) {
+    } else if (kpis.is90PercentReached) {
+      alertBannerEl.className = 'alert-banner alert-orange';
+      alertBannerEl.innerHTML = `
+        <div class="alert-icon">${ICONS.alertTriangle}</div>
+        <div class="alert-content">
+          <div class="alert-title">🚨 Urgent: 90% Budget Consumed</div>
+          <div>You have used <strong>${kpis.actualPercent}%</strong> of your monthly budget. Only <strong>${formatCurrency(kpis.remaining)}</strong> remains. Automated Gmail warning dispatched.</div>
+        </div>
+      `;
+      alertBannerEl.style.display = 'flex';
+    } else if (kpis.is50PercentReached) {
       alertBannerEl.className = 'alert-banner alert-warning';
       alertBannerEl.innerHTML = `
         <div class="alert-icon">${ICONS.alertTriangle}</div>
         <div class="alert-content">
-          <strong>Caution: Approaching Budget Limit!</strong> You have spent ${kpis.actualPercent}% of your monthly budget. Only ${formatCurrency(kpis.remaining)} remains.
+          <div class="alert-title">⚠️ 50% Budget Milestone Reached</div>
+          <div>You have reached half (<strong>${kpis.actualPercent}%</strong>) of your planned monthly budget (Spent: ${formatCurrency(kpis.totalSpent)} / ${formatCurrency(kpis.budget)}). Automated Gmail milestone alert dispatched.</div>
         </div>
       `;
       alertBannerEl.style.display = 'flex';
@@ -386,6 +416,9 @@ export function openModal(modalId) {
 }
 
 export function closeModal(modalId) {
+  if (modalId === 'authModal' && !authService.isAuthenticated()) {
+    return; // Entrance gate remains active until a valid email is verified
+  }
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.classList.remove('modal-active');
@@ -460,8 +493,22 @@ export function updateAuthUI(user, store) {
     if (toolsAccountTitle) toolsAccountTitle.textContent = displayName;
     if (toolsAccountDesc) toolsAccountDesc.textContent = `Connected as ${user.email}. Your expense records are securely associated with your Gmail identity.`;
     if (toolsAccountBtn) {
-      toolsAccountBtn.textContent = 'Switch or Sign Out';
+      toolsAccountBtn.textContent = 'Switch Account';
     }
+
+    // Tools alerts card
+    const toolsAlertEmail = document.getElementById('toolsAlertEmailDisplay');
+    if (toolsAlertEmail) toolsAlertEmail.textContent = user.email;
+
+    // Entrance gate modal adjustments when authenticated
+    const closeBtn = document.getElementById('authModalCloseBtn');
+    const gateBanner = document.getElementById('entranceGateBanner');
+    const modalTitle = document.getElementById('authModalTitle');
+    const modalSubtitle = document.getElementById('authModalSubtitle');
+    if (closeBtn) closeBtn.style.display = 'flex';
+    if (gateBanner) gateBanner.style.display = 'none';
+    if (modalTitle) modalTitle.textContent = 'Hisabo Account & Alerts';
+    if (modalSubtitle) modalSubtitle.textContent = `Connected: ${user.email}`;
   } else {
     if (signInBtn) signInBtn.style.display = 'inline-flex';
     if (profileWrapper) {
@@ -470,11 +517,24 @@ export function updateAuthUI(user, store) {
       if (dropdown) dropdown.classList.remove('active');
     }
 
-    if (toolsAccountTitle) toolsAccountTitle.textContent = 'Google Account';
-    if (toolsAccountDesc) toolsAccountDesc.textContent = 'Sign in with your Gmail to personalize expense records and enable multi-device identity.';
+    if (toolsAccountTitle) toolsAccountTitle.textContent = 'Email Account Required';
+    if (toolsAccountDesc) toolsAccountDesc.textContent = 'Sign in with your verified email to access your expenses and activate budget tracking.';
     if (toolsAccountBtn) {
-      toolsAccountBtn.textContent = 'Sign in with Gmail';
+      toolsAccountBtn.textContent = 'Sign In to Enter';
     }
+
+    const toolsAlertEmail = document.getElementById('toolsAlertEmailDisplay');
+    if (toolsAlertEmail) toolsAlertEmail.textContent = 'Sign in required';
+
+    // Entrance gate adjustments when unauthenticated
+    const closeBtn = document.getElementById('authModalCloseBtn');
+    const gateBanner = document.getElementById('entranceGateBanner');
+    const modalTitle = document.getElementById('authModalTitle');
+    const modalSubtitle = document.getElementById('authModalSubtitle');
+    if (closeBtn) closeBtn.style.display = 'none';
+    if (gateBanner) gateBanner.style.display = 'flex';
+    if (modalTitle) modalTitle.textContent = 'Verify Email to Enter Hisabo';
+    if (modalSubtitle) modalSubtitle.textContent = 'Only valid email addresses can enter & receive budget alerts';
   }
 }
 

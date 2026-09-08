@@ -3,6 +3,7 @@
  */
 
 import { expenseDAO } from '../db/db.js';
+import { checkAndTriggerBudgetAlerts } from '../services/mail.service.js';
 
 export const expensesController = {
   getAll(req, res) {
@@ -19,7 +20,7 @@ export const expensesController = {
     res.json({ expense });
   },
 
-  create(req, res) {
+  async create(req, res) {
     const { item, amount, date, category, paymentMethod, notes, id } = req.body || {};
 
     if (!item || !item.trim()) {
@@ -41,10 +42,22 @@ export const expensesController = {
       notes
     });
 
-    res.status(201).json({ expense: newExpense });
+    let alertInfo = null;
+    try {
+      alertInfo = await checkAndTriggerBudgetAlerts(
+        req.user.id,
+        newExpense.monthKey,
+        req.user.email,
+        req.user.name
+      );
+    } catch (err) {
+      console.error('[Hisabo Alerts] Error checking budget alerts:', err.message);
+    }
+
+    res.status(201).json({ expense: newExpense, alertInfo });
   },
 
-  update(req, res) {
+  async update(req, res) {
     const { item, amount, date, category, paymentMethod, notes } = req.body || {};
 
     if (amount !== undefined) {
@@ -67,7 +80,19 @@ export const expensesController = {
       return res.status(404).json({ error: 'Expense not found or access denied' });
     }
 
-    res.json({ expense: updated });
+    let alertInfo = null;
+    try {
+      alertInfo = await checkAndTriggerBudgetAlerts(
+        req.user.id,
+        updated.monthKey,
+        req.user.email,
+        req.user.name
+      );
+    } catch (err) {
+      console.error('[Hisabo Alerts] Error checking budget alerts on update:', err.message);
+    }
+
+    res.json({ expense: updated, alertInfo });
   },
 
   delete(req, res) {
@@ -92,7 +117,7 @@ export const expensesController = {
     res.json({ success: true, deletedCount: count });
   },
 
-  sync(req, res) {
+  async sync(req, res) {
     const { expenses } = req.body || {};
     if (!Array.isArray(expenses)) {
       return res.status(400).json({ error: 'Expected an array of expenses under "expenses"' });
@@ -100,6 +125,23 @@ export const expensesController = {
 
     const syncedCount = expenseDAO.bulkSync(req.user.id, expenses);
     const allUserExpenses = expenseDAO.getAll(req.user.id);
+
+    // Evaluate budget alerts for all affected months
+    const affectedMonths = [
+      ...new Set(
+        expenses
+          .map(e => e.monthKey || (e.date ? e.date.substring(0, 7) : null))
+          .filter(Boolean)
+      )
+    ];
+
+    for (const m of affectedMonths) {
+      try {
+        await checkAndTriggerBudgetAlerts(req.user.id, m, req.user.email, req.user.name);
+      } catch (err) {
+        console.error('[Hisabo Alerts] Error checking alerts during bulk sync:', err.message);
+      }
+    }
 
     res.json({
       success: true,

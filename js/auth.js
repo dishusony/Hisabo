@@ -166,21 +166,31 @@ class AuthService {
   /**
    * Handle credential response from Google Identity Services
    */
-  handleGoogleCredentialResponse(response) {
+  async handleGoogleCredentialResponse(response) {
     if (!response || !response.credential) {
       console.error('[Auth] Invalid Google credential response');
       return null;
     }
 
     const payload = this.decodeJwtResponse(response.credential);
-    if (!payload || !payload.email) {
-      console.error('[Auth] Could not extract user profile from Google token');
+    if (!payload || !payload.email || !this.validateEmail(payload.email)) {
+      console.error('[Auth] Could not extract valid user profile from Google token');
       return null;
     }
 
+    let backendUser = null;
+    if (typeof fetch !== 'undefined') {
+      try {
+        const res = await api.login({ credential: response.credential });
+        backendUser = res.user;
+      } catch (e) {
+        console.warn('[Auth] Backend sync note:', e.message);
+      }
+    }
+
     const user = {
-      id: payload.sub || 'g_' + Date.now(),
-      email: payload.email,
+      id: backendUser?.id || payload.sub || ('g_' + Date.now()),
+      email: payload.email.toLowerCase().trim(),
       name: payload.name || payload.given_name || payload.email.split('@')[0],
       picture: payload.picture || this.generateAvatarUrl(payload.name || payload.email),
       givenName: payload.given_name || payload.name,
@@ -190,29 +200,38 @@ class AuthService {
     };
 
     this.setCurrentUser(user);
-    if (typeof fetch !== 'undefined') {
-      api.login({ credential: response.credential }).catch(e => {
-        console.warn('[Auth] Backend sync note:', e.message);
-      });
-    }
     return user;
   }
 
   /**
-   * Direct Gmail Login (Instant 1-Tap or manual email entry)
-   * Perfect for local testing, offline mode, or when OAuth credentials are not yet configured.
+   * Direct Gmail / Email Login with Strict Validation
+   * Ensures only users with genuinely valid email addresses can enter Hisabo.
    */
-  loginWithGmail(email, name = '', picture = '') {
+  async loginWithGmail(email, name = '', picture = '') {
     const cleanEmail = (email || '').trim().toLowerCase();
     if (!cleanEmail || !this.validateEmail(cleanEmail)) {
-      throw new Error('Please enter a valid Gmail or email address');
+      throw new Error('Only valid email addresses are permitted (e.g. name@example.com). Please check your email and try again.');
     }
 
     const displayName = (name || '').trim() || this.extractNameFromEmail(cleanEmail);
     const avatar = picture || this.generateAvatarUrl(displayName);
 
+    let backendUser = null;
+    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+      try {
+        const res = await api.login({ email: cleanEmail, name: displayName, picture: avatar });
+        backendUser = res.user;
+      } catch (err) {
+        // If server explicitly returned validation error (400)
+        if (err.status === 400) {
+          throw err;
+        }
+        console.warn('[Auth] Offline / local fallback note:', err.message);
+      }
+    }
+
     const user = {
-      id: 'gmail_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_'),
+      id: backendUser?.id || ('user_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')),
       email: cleanEmail,
       name: displayName,
       picture: avatar,
@@ -223,19 +242,54 @@ class AuthService {
     };
 
     this.setCurrentUser(user);
-    if (typeof fetch !== 'undefined') {
-      api.login({ email: cleanEmail, name: displayName, picture: avatar }).catch(e => {
-        console.warn('[Auth] Backend sync note:', e.message);
-      });
-    }
     return user;
   }
 
   /**
-   * Validate email format
+   * Strict RFC 5322 & domain structure email validation
+   * Rejects malformed addresses, consecutive dots, missing or invalid TLDs, and spaces.
    */
   validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!email || typeof email !== 'string') return false;
+    const clean = email.trim();
+    if (clean.length > 254 || clean.length < 5) return false;
+
+    // Disallow whitespace
+    if (/\s/.test(clean)) return false;
+
+    // Must have exactly one @
+    const parts = clean.split('@');
+    if (parts.length !== 2) return false;
+
+    const [localPart, domainPart] = parts;
+    if (!localPart || !domainPart) return false;
+    if (localPart.length > 64) return false;
+
+    // Local part constraints
+    if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.includes('..')) {
+      return false;
+    }
+    const localRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+    if (!localRegex.test(localPart)) return false;
+
+    // Domain part constraints
+    if (domainPart.startsWith('.') || domainPart.endsWith('.') || domainPart.includes('..')) {
+      return false;
+    }
+    const domainLabels = domainPart.split('.');
+    if (domainLabels.length < 2) return false;
+
+    for (const label of domainLabels) {
+      if (!label || label.length > 63) return false;
+      if (label.startsWith('-') || label.endsWith('-')) return false;
+      if (!/^[a-zA-Z0-9-]+$/.test(label)) return false;
+    }
+
+    // TLD must be alphabetic and at least 2 chars
+    const tld = domainLabels[domainLabels.length - 1];
+    if (!/^[a-zA-Z]{2,}$/.test(tld)) return false;
+
+    return true;
   }
 
   /**

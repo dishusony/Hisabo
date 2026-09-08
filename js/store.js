@@ -141,7 +141,11 @@ class ExpenseStore {
       this.budgets[monthKey] = Math.round(val);
       this.saveBudgets();
       if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-        api.setBudget(monthKey, Math.round(val)).catch(() => {});
+        api.setBudget(monthKey, Math.round(val)).then(res => {
+          if (res?.alertInfo?.alertsTriggered?.length && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('hisabo:budget-alerts', { detail: res.alertInfo }));
+          }
+        }).catch(() => {});
       }
       return true;
     }
@@ -194,7 +198,11 @@ class ExpenseStore {
 
     // Async cloud sync if authenticated
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      api.createExpense(newExpense).catch(() => {});
+      api.createExpense(newExpense).then(res => {
+        if (res?.alertInfo?.alertsTriggered?.length && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hisabo:budget-alerts', { detail: res.alertInfo }));
+        }
+      }).catch(() => {});
     }
 
     return newExpense;
@@ -228,7 +236,11 @@ class ExpenseStore {
 
     // Async cloud sync if authenticated
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      api.updateExpense(id, this.expenses[index]).catch(() => {});
+      api.updateExpense(id, this.expenses[index]).then(res => {
+        if (res?.alertInfo?.alertsTriggered?.length && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hisabo:budget-alerts', { detail: res.alertInfo }));
+        }
+      }).catch(() => {});
     }
 
     return this.expenses[index];
@@ -328,8 +340,12 @@ class ExpenseStore {
     const transactionCount = list.length;
     const averageExpense = transactionCount > 0 ? Math.round((totalSpent / transactionCount) * 100) / 100 : 0;
     const percentUsed = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 100;
+    const actualPercent = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+    const is50PercentReached = actualPercent >= 50;
+    const is90PercentReached = actualPercent >= 90;
+    const is100PercentReached = actualPercent >= 100 || totalSpent >= budget;
     const isOverBudget = totalSpent > budget;
-    const isNearBudget = !isOverBudget && percentUsed >= 80;
+    const isNearBudget = !isOverBudget && is90PercentReached;
 
     return {
       monthKey,
@@ -340,7 +356,10 @@ class ExpenseStore {
       averageExpense,
       highestExpense,
       percentUsed,
-      actualPercent: budget > 0 ? Math.round((totalSpent / budget) * 100) : 0,
+      actualPercent,
+      is50PercentReached,
+      is90PercentReached,
+      is100PercentReached,
       isOverBudget,
       isNearBudget
     };

@@ -7,6 +7,7 @@ import { store, CATEGORIES, PAYMENT_METHODS } from './store.js';
 import { refreshAllCharts, initCharts } from './charts.js';
 import { exportExpensesToCSV, parseCSV } from './csv.js';
 import { authService } from './auth.js';
+import { api } from './api.js';
 import {
   updateDashboardKPIs,
   renderExpenseTable,
@@ -45,12 +46,22 @@ class AppController {
       store.setCurrentUser(user);
       updateAuthUI(user, store);
       if (user) {
+        closeModal('authModal');
         await store.syncWithBackend();
         this.render();
-      } else if (this.activeTab === 'expenses') {
-        this.renderTableAndSummary();
+      } else {
+        // Enforce Entrance Gate: only valid email can enter
+        openModal('authModal');
+        if (this.activeTab === 'expenses') {
+          this.renderTableAndSummary();
+        }
       }
     });
+
+    // Check on initial startup: if not authenticated, trigger Entrance Gate
+    if (!authService.isAuthenticated()) {
+      openModal('authModal');
+    }
 
     // Try rendering Google Identity Services button if available
     const tryRenderGsi = () => {
@@ -179,10 +190,13 @@ class AppController {
       });
     });
 
-    // Close modals on background click
+    // Close modals on background click (except authModal when unauthenticated)
     document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) {
+          if (backdrop.id === 'authModal' && !authService.isAuthenticated()) {
+            return; // Entrance gate cannot be dismissed without valid email
+          }
           backdrop.classList.remove('modal-active');
           document.body.style.overflow = '';
         }
@@ -330,35 +344,125 @@ class AppController {
       }
     });
 
-    // Direct Gmail Sign In Form
-    document.getElementById('gmailLoginForm')?.addEventListener('submit', (e) => {
+    // Direct Gmail / Email Sign In Form (Strict Validation Entrance Gate)
+    document.getElementById('gmailLoginForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('gmailInput')?.value;
-      const name = document.getElementById('gmailNameInput')?.value;
+      const emailInput = document.getElementById('gmailInput');
+      const nameInput = document.getElementById('gmailNameInput');
+      const errorBox = document.getElementById('gmailInputError');
+      const submitBtn = document.getElementById('gmailSubmitBtn');
+
+      const rawEmail = (emailInput?.value || '').trim();
+      const rawName = (nameInput?.value || '').trim();
+
+      // Client-side strict validation check
+      if (!authService.validateEmail(rawEmail)) {
+        if (errorBox) {
+          errorBox.textContent = '❌ Access Denied: Only valid email addresses can enter Hisabo (e.g. name@example.com). Please check your email and try again.';
+          errorBox.style.display = 'block';
+        }
+        if (emailInput) {
+          emailInput.classList.add('form-input-error');
+          emailInput.focus();
+        }
+        showToast('Only valid email addresses can enter Hisabo.', 'error');
+        return;
+      }
+
+      // Valid email: clear error state
+      if (errorBox) errorBox.style.display = 'none';
+      if (emailInput) emailInput.classList.remove('form-input-error');
+
+      const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = 'Verifying Email & Entering...';
+      }
+
       try {
-        const user = authService.loginWithGmail(email, name);
+        const user = await authService.loginWithGmail(rawEmail, rawName);
         closeModal('authModal');
-        showToast(`Welcome, ${user.givenName || user.name}!`);
+        showToast(`🎉 Access Granted! Welcome, ${user.givenName || user.name}!`);
         this.render();
       } catch (err) {
+        if (errorBox) {
+          errorBox.textContent = `❌ ${err.message}`;
+          errorBox.style.display = 'block';
+        }
         showToast(err.message, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnText;
+        }
       }
     });
 
-    // 1-Tap Quick Demo Account Buttons
+    // 1-Tap Quick Verified Demo Accounts
     document.querySelectorAll('.quick-account-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const email = btn.dataset.demoEmail;
         const name = btn.dataset.demoName;
         try {
-          const user = authService.loginWithGmail(email, name);
+          const user = await authService.loginWithGmail(email, name);
           closeModal('authModal');
-          showToast(`Signed in as ${user.name}!`);
+          showToast(`Access Granted! Welcome, ${user.name}!`);
           this.render();
         } catch (err) {
           showToast(err.message, 'error');
         }
       });
+    });
+
+    // Test Gmail Alert Notification Handlers
+    const handleSendTestEmail = async (triggerBtn) => {
+      if (!authService.isAuthenticated()) {
+        showToast('Please enter your valid email first to test alerts.', 'error');
+        openModal('authModal');
+        return;
+      }
+
+      const originalHtml = triggerBtn ? triggerBtn.innerHTML : '';
+      if (triggerBtn) {
+        triggerBtn.disabled = true;
+        triggerBtn.innerHTML = '<span>Sending...</span>';
+      }
+
+      try {
+        const res = await api.sendTestEmail();
+        if (res.simulated) {
+          showToast('ℹ️ Simulated Alert: Notification logged on server (add GMAIL_USER & GMAIL_APP_PASSWORD in .env for live inbox delivery).', 'warning');
+        } else if (res.success) {
+          showToast(`✅ Test budget alert delivered to ${authService.getCurrentUser()?.email}!`);
+        } else {
+          showToast(`Email error: ${res.error || 'Failed to dispatch email'}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Email error: ${err.message}`, 'error');
+      } finally {
+        if (triggerBtn) {
+          triggerBtn.disabled = false;
+          triggerBtn.innerHTML = originalHtml;
+        }
+      }
+    };
+
+    document.getElementById('quickTestMailBtn')?.addEventListener('click', (e) => handleSendTestEmail(e.currentTarget));
+    document.getElementById('toolsSendTestEmailBtn')?.addEventListener('click', (e) => handleSendTestEmail(e.currentTarget));
+
+    // Listen for automated budget alert dispatches (50%, 90%, 100%)
+    window.addEventListener('hisabo:budget-alerts', (e) => {
+      const alerts = e.detail?.alertsTriggered || [];
+      alerts.forEach(alert => {
+        if (alert.threshold === 100) {
+          showToast(`🛑 Hisabo Alert: 100% of your monthly budget reached / exceeded! Automated Gmail notification dispatched.`, 'error');
+        } else if (alert.threshold === 90) {
+          showToast(`🚨 Hisabo Alert: 90% of your budget consumed! Automated warning sent via Gmail.`, 'warning');
+        } else if (alert.threshold === 50) {
+          showToast(`⚠️ Hisabo Alert: 50% budget milestone reached! Half of your planned funds used.`, 'warning');
+        }
+      });
+      this.renderTableAndSummary();
     });
 
     // Google Client ID Config Accordion
@@ -392,11 +496,18 @@ class AppController {
       }
     });
 
-    // Global keyboard shortcuts
+    // Global keyboard shortcuts (esc will not close unauthenticated gate)
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-backdrop.modal-active').forEach(m => m.classList.remove('modal-active'));
-        document.body.style.overflow = '';
+        document.querySelectorAll('.modal-backdrop.modal-active').forEach(m => {
+          if (m.id === 'authModal' && !authService.isAuthenticated()) {
+            return; // Cannot bypass entrance gate
+          }
+          m.classList.remove('modal-active');
+        });
+        if (authService.isAuthenticated()) {
+          document.body.style.overflow = '';
+        }
       }
     });
   }
