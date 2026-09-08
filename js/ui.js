@@ -392,3 +392,89 @@ export function closeModal(modalId) {
     document.body.style.overflow = '';
   }
 }
+
+/**
+ * Updates UI header and tools card depending on whether the user is logged in
+ */
+export function updateAuthUI(user, store) {
+  const signInBtn = document.getElementById('googleSignInBtn');
+  const profileWrapper = document.getElementById('userProfileWrapper');
+  const userAvatarImg = document.getElementById('userAvatarImg');
+  const userAvatarInitial = document.getElementById('userAvatarInitial');
+  const userDisplayName = document.getElementById('userDisplayName');
+
+  const dropdownAvatarImg = document.getElementById('dropdownAvatarImg');
+  const dropdownAvatarInitial = document.getElementById('dropdownAvatarInitial');
+  const dropdownUserName = document.getElementById('dropdownUserName');
+  const dropdownUserEmail = document.getElementById('dropdownUserEmail');
+  const dropdownExpenseCount = document.getElementById('dropdownExpenseCount');
+
+  const toolsAccountTitle = document.getElementById('toolsAccountTitle');
+  const toolsAccountDesc = document.getElementById('toolsAccountDesc');
+  const toolsAccountBtn = document.getElementById('toolsAccountBtn');
+
+  if (user && user.email) {
+    if (signInBtn) signInBtn.style.display = 'none';
+    if (profileWrapper) profileWrapper.style.display = 'block';
+
+    const displayName = user.name || user.email.split('@')[0];
+    const initial = (displayName.charAt(0) || 'U').toUpperCase();
+
+    if (userDisplayName) {
+      userDisplayName.textContent = user.givenName || displayName.split(' ')[0];
+    }
+
+    if (user.picture && !user.picture.startsWith('data:image/svg')) {
+      if (userAvatarImg) {
+        userAvatarImg.src = user.picture;
+        userAvatarImg.style.display = 'block';
+      }
+      if (userAvatarInitial) userAvatarInitial.style.display = 'none';
+
+      if (dropdownAvatarImg) {
+        dropdownAvatarImg.src = user.picture;
+        dropdownAvatarImg.style.display = 'block';
+      }
+      if (dropdownAvatarInitial) dropdownAvatarInitial.style.display = 'none';
+    } else {
+      if (userAvatarImg) userAvatarImg.style.display = 'none';
+      if (userAvatarInitial) {
+        userAvatarInitial.textContent = initial;
+        userAvatarInitial.style.display = 'flex';
+      }
+      if (dropdownAvatarImg) dropdownAvatarImg.style.display = 'none';
+      if (dropdownAvatarInitial) {
+        dropdownAvatarInitial.textContent = initial;
+        dropdownAvatarInitial.style.display = 'flex';
+      }
+    }
+
+    if (dropdownUserName) dropdownUserName.textContent = displayName;
+    if (dropdownUserEmail) dropdownUserEmail.textContent = user.email;
+
+    if (dropdownExpenseCount && store) {
+      const count = store.getUserExpenseCount(user.email);
+      dropdownExpenseCount.textContent = count;
+    }
+
+    if (toolsAccountTitle) toolsAccountTitle.textContent = displayName;
+    if (toolsAccountDesc) toolsAccountDesc.textContent = `Connected as ${user.email}. Your expense records are securely associated with your Gmail identity.`;
+    if (toolsAccountBtn) {
+      toolsAccountBtn.textContent = 'Switch or Sign Out';
+    }
+  } else {
+    if (signInBtn) signInBtn.style.display = 'inline-flex';
+    if (profileWrapper) {
+      profileWrapper.style.display = 'none';
+      const dropdown = document.getElementById('userProfileDropdown');
+      if (dropdown) dropdown.classList.remove('active');
+    }
+
+    if (toolsAccountTitle) toolsAccountTitle.textContent = 'Google Account';
+    if (toolsAccountDesc) toolsAccountDesc.textContent = 'Sign in with your Gmail to personalize expense records and enable multi-device identity.';
+    if (toolsAccountBtn) {
+      toolsAccountBtn.textContent = 'Sign in with Gmail';
+    }
+  }
+}
+

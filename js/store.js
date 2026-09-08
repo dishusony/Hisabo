@@ -38,6 +38,7 @@ class ExpenseStore {
   constructor() {
     this.expenses = [];
     this.budgets = {};
+    this.currentUser = null;
     this.selectedMonth = this.getInitialMonth();
     this.init();
   }
@@ -181,6 +182,7 @@ class ExpenseStore {
       paymentMethod: data.paymentMethod || 'UPI',
       category: data.category || 'Food',
       notes: (data.notes || '').trim(),
+      userEmail: data.userEmail || (this.currentUser ? this.currentUser.email : null),
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -422,6 +424,34 @@ class ExpenseStore {
 
     this.saveExpenses();
     this.saveBudgets();
+  }
+
+  setCurrentUser(user) {
+    this.currentUser = user || null;
+  }
+
+  getCurrentUser() {
+    return this.currentUser;
+  }
+
+  getUserExpenseCount(email = (this.currentUser ? this.currentUser.email : null)) {
+    if (!email) return this.expenses.length;
+    return this.expenses.filter(e => e.userEmail === email || !e.userEmail).length;
+  }
+
+  migrateGuestDataToUser(email) {
+    if (!email) return 0;
+    let count = 0;
+    this.expenses.forEach(item => {
+      if (!item.userEmail) {
+        item.userEmail = email;
+        count++;
+      }
+    });
+    if (count > 0) {
+      this.saveExpenses();
+    }
+    return count;
   }
 }
 

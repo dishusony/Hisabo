@@ -6,6 +6,7 @@
 import { store, CATEGORIES, PAYMENT_METHODS } from './store.js';
 import { refreshAllCharts, initCharts } from './charts.js';
 import { exportExpensesToCSV, parseCSV } from './csv.js';
+import { authService } from './auth.js';
 import {
   updateDashboardKPIs,
   renderExpenseTable,
@@ -15,7 +16,8 @@ import {
   closeModal,
   showToast,
   formatCurrency,
-  formatMonthName
+  formatMonthName,
+  updateAuthUI
 } from './ui.js';
 
 class AppController {
@@ -30,8 +32,42 @@ class AppController {
     this.initTheme();
     initCharts();
     this.initDOM();
+    this.initAuth();
     this.initEventListeners();
     this.render();
+  }
+
+  initAuth() {
+    authService.init();
+
+    // Listen for auth state changes
+    authService.onAuthStateChanged((user) => {
+      store.setCurrentUser(user);
+      updateAuthUI(user, store);
+      if (this.activeTab === 'expenses') {
+        this.renderTableAndSummary();
+      }
+    });
+
+    // Try rendering Google Identity Services button if available
+    const tryRenderGsi = () => {
+      const btnWrapper = document.getElementById('gsiButtonWrapper');
+      const divider = document.getElementById('gsiDivider');
+      if (btnWrapper && authService.getGoogleClientId()) {
+        const rendered = authService.renderGoogleButton(btnWrapper);
+        if (rendered && divider) {
+          divider.style.display = 'flex';
+        }
+      }
+    };
+
+    if (window.google?.accounts?.id) {
+      tryRenderGsi();
+    } else {
+      window.addEventListener('load', () => {
+        setTimeout(tryRenderGsi, 600);
+      });
+    }
   }
 
   initTheme() {
@@ -219,6 +255,138 @@ class AppController {
       showToast('Loaded realistic demo data successfully!');
       this.render();
       this.switchTab('expenses');
+    });
+
+    // ========================================================================
+    // Gmail & Google Authentication Event Listeners
+    // ========================================================================
+    document.getElementById('googleSignInBtn')?.addEventListener('click', () => {
+      openModal('authModal');
+    });
+
+    document.getElementById('toolsAccountBtn')?.addEventListener('click', () => {
+      if (authService.isAuthenticated()) {
+        const dropdown = document.getElementById('userProfileDropdown');
+        dropdown?.classList.toggle('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        openModal('authModal');
+      }
+    });
+
+    // User Profile Dropdown Toggle
+    const profileBtn = document.getElementById('userProfileBtn');
+    const profileDropdown = document.getElementById('userProfileDropdown');
+    profileBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = profileDropdown?.classList.toggle('active');
+      profileBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      const countEl = document.getElementById('dropdownExpenseCount');
+      if (countEl) {
+        countEl.textContent = store.getUserExpenseCount(authService.getCurrentUser()?.email);
+      }
+    });
+
+    // Close profile dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (profileDropdown?.classList.contains('active')) {
+        if (!profileDropdown.contains(e.target) && !profileBtn?.contains(e.target)) {
+          profileDropdown.classList.remove('active');
+          profileBtn?.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
+
+    // Sign Out
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+      profileDropdown?.classList.remove('active');
+      authService.logout();
+      showToast('Signed out of Google Account');
+      this.render();
+    });
+
+    // Switch Account
+    document.getElementById('switchAccountBtn')?.addEventListener('click', () => {
+      profileDropdown?.classList.remove('active');
+      openModal('authModal');
+    });
+
+    // Sync Guest Expenses to Signed-in User
+    document.getElementById('syncGuestDataBtn')?.addEventListener('click', () => {
+      const user = authService.getCurrentUser();
+      if (user) {
+        const count = store.migrateGuestDataToUser(user.email);
+        profileDropdown?.classList.remove('active');
+        if (count > 0) {
+          showToast(`Synced ${count} guest expenses to ${user.email}!`);
+        } else {
+          showToast('All current expenses are already bound to your account.');
+        }
+        updateAuthUI(user, store);
+        this.render();
+      }
+    });
+
+    // Direct Gmail Sign In Form
+    document.getElementById('gmailLoginForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = document.getElementById('gmailInput')?.value;
+      const name = document.getElementById('gmailNameInput')?.value;
+      try {
+        const user = authService.loginWithGmail(email, name);
+        closeModal('authModal');
+        showToast(`Welcome, ${user.givenName || user.name}!`);
+        this.render();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    // 1-Tap Quick Demo Account Buttons
+    document.querySelectorAll('.quick-account-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const email = btn.dataset.demoEmail;
+        const name = btn.dataset.demoName;
+        try {
+          const user = authService.loginWithGmail(email, name);
+          closeModal('authModal');
+          showToast(`Signed in as ${user.name}!`);
+          this.render();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
+
+    // Google Client ID Config Accordion
+    const toggleConfigBtn = document.getElementById('toggleClientIdConfigBtn');
+    const configBox = document.getElementById('clientIdConfigBox');
+    const clientIdInput = document.getElementById('googleClientIdInput');
+    const saveClientIdBtn = document.getElementById('saveClientIdBtn');
+
+    toggleConfigBtn?.addEventListener('click', () => {
+      if (configBox) {
+        const isHidden = configBox.style.display === 'none';
+        configBox.style.display = isHidden ? 'block' : 'none';
+        if (isHidden && clientIdInput) {
+          clientIdInput.value = authService.getGoogleClientId();
+          clientIdInput.focus();
+        }
+      }
+    });
+
+    saveClientIdBtn?.addEventListener('click', () => {
+      if (clientIdInput) {
+        const val = clientIdInput.value.trim();
+        authService.setGoogleClientId(val);
+        showToast(val ? 'Google Client ID saved!' : 'Google Client ID removed');
+        const btnWrapper = document.getElementById('gsiButtonWrapper');
+        const divider = document.getElementById('gsiDivider');
+        if (btnWrapper && val) {
+          const rendered = authService.renderGoogleButton(btnWrapper);
+          if (rendered && divider) divider.style.display = 'flex';
+        }
+      }
     });
 
     // Global keyboard shortcuts
@@ -543,6 +711,7 @@ class AppController {
     this.updateMonthSelectorUI();
     const kpis = store.getMonthKPIs(store.getSelectedMonth());
     updateDashboardKPIs(kpis);
+    updateAuthUI(authService.getCurrentUser(), store);
     this.renderTableAndSummary();
     if (this.activeTab === 'analytics') {
       refreshAllCharts(store);

@@ -89,6 +89,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 1b. Safe Public Auth Config API (Public Client ID only, never secrets)
+  if (pathname === '/api/auth/config') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      googleClientId: process.env.GOOGLE_CLIENT_ID || ''
+    }));
+    return;
+  }
+
   // 2. Strict Security Check: Block all requests attempting to access .env or sensitive files
   const isForbidden = FORBIDDEN_PATTERNS.some((pattern) => pattern.test(pathname)) ||
                       pathname.includes('..') || // prevent directory traversal

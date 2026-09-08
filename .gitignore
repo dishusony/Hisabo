@@ -49,5 +49,7 @@ desktop.ini
 # Test scratch & local helpers
 test_runner.js
 test_security.js
+test_auth_integration.js
 push_to_github.bat
 setup_git.ps1
+
