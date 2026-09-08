@@ -50,6 +50,7 @@ desktop.ini
 test_runner.js
 test_security.js
 test_auth_integration.js
+test_refresh_persistence.js
 push_to_github.bat
 setup_git.ps1
 

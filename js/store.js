@@ -4,10 +4,10 @@
  */
 
 const STORAGE_KEYS = {
-  EXPENSES: 'rupeeflow_expenses_v1',
-  BUDGETS: 'rupeeflow_budgets_v1',
-  THEME: 'rupeeflow_theme_v1',
-  SELECTED_MONTH: 'rupeeflow_selected_month_v1'
+  EXPENSES: 'hisabo_expenses_v1',
+  BUDGETS: 'hisabo_budgets_v1',
+  THEME: 'hisabo_theme_v1',
+  SELECTED_MONTH: 'hisabo_selected_month_v1'
 };
 
 export const CATEGORIES = [
@@ -64,21 +64,16 @@ class ExpenseStore {
         this.loadDemoData();
         return;
       }
-      const storedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+      const storedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES) || 
+                             localStorage.getItem('rupeeflow_expenses_v1');
       if (storedExpenses) {
         this.expenses = JSON.parse(storedExpenses);
       } else {
         this.loadDemoData();
       }
 
-      // Ensure all September expenses are deleted
-      this.expenses = this.expenses.filter(item => {
-        const m = item.date ? item.date.substring(0, 7) : item.monthKey;
-        return m !== '2026-09';
-      });
-      this.saveExpenses();
-
-      const storedBudgets = localStorage.getItem(STORAGE_KEYS.BUDGETS);
+      const storedBudgets = localStorage.getItem(STORAGE_KEYS.BUDGETS) || 
+                            localStorage.getItem('rupeeflow_budgets_v1');
       if (storedBudgets) {
         this.budgets = JSON.parse(storedBudgets);
       } else {
@@ -100,6 +95,7 @@ class ExpenseStore {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(this.expenses));
+        localStorage.setItem('rupeeflow_expenses_v1', JSON.stringify(this.expenses));
       }
     } catch (e) {
       console.error('Error saving expenses:', e);
@@ -110,6 +106,7 @@ class ExpenseStore {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(this.budgets));
+        localStorage.setItem('rupeeflow_budgets_v1', JSON.stringify(this.budgets));
       }
     } catch (e) {
       console.error('Error saving budgets:', e);
