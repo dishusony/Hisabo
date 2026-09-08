@@ -3,6 +3,8 @@
  * Handles all CRUD operations, monthly budgets, calculations, and demo data.
  */
 
+import { api } from './api.js';
+
 const STORAGE_KEYS = {
   EXPENSES: 'hisabo_expenses_v1',
   BUDGETS: 'hisabo_budgets_v1',
@@ -138,6 +140,9 @@ class ExpenseStore {
     if (!isNaN(val) && val >= 0) {
       this.budgets[monthKey] = Math.round(val);
       this.saveBudgets();
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        api.setBudget(monthKey, Math.round(val)).catch(() => {});
+      }
       return true;
     }
     return false;
@@ -186,6 +191,12 @@ class ExpenseStore {
 
     this.expenses.unshift(newExpense);
     this.saveExpenses();
+
+    // Async cloud sync if authenticated
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      api.createExpense(newExpense).catch(() => {});
+    }
+
     return newExpense;
   }
 
@@ -214,6 +225,12 @@ class ExpenseStore {
     };
 
     this.saveExpenses();
+
+    // Async cloud sync if authenticated
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      api.updateExpense(id, this.expenses[index]).catch(() => {});
+    }
+
     return this.expenses[index];
   }
 
@@ -223,6 +240,9 @@ class ExpenseStore {
     const removed = initialLength > this.expenses.length;
     if (removed) {
       this.saveExpenses();
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        api.deleteExpense(id).catch(() => {});
+      }
     }
     return removed;
   }
@@ -252,11 +272,17 @@ class ExpenseStore {
       return itemMonth !== monthKey;
     });
     this.saveExpenses();
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      api.deleteMonth(monthKey).catch(() => {});
+    }
   }
 
   clearAllExpenses() {
     this.expenses = [];
     this.saveExpenses();
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      api.deleteAllExpenses().catch(() => {});
+    }
   }
 
   getDistinctMonths() {
@@ -449,6 +475,38 @@ class ExpenseStore {
       this.saveExpenses();
     }
     return count;
+  }
+
+  async syncWithBackend() {
+    if (typeof fetch === 'undefined' || !api?.hasToken || !api.hasToken()) {
+      return { synced: false, count: this.expenses.length };
+    }
+
+    try {
+      // 1. Upload local expenses to backend DB
+      if (this.expenses.length > 0) {
+        await api.syncExpenses(this.expenses);
+      }
+
+      // 2. Fetch authoritative user expenses from backend
+      const cloudExpenses = await api.getExpenses();
+      if (Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
+        this.expenses = cloudExpenses;
+        this.saveExpenses();
+      }
+
+      // 3. Fetch authoritative budgets from backend
+      const cloudBudgets = await api.getBudgets();
+      if (cloudBudgets && typeof cloudBudgets === 'object' && Object.keys(cloudBudgets).length > 0) {
+        this.budgets = { ...this.budgets, ...cloudBudgets };
+        this.saveBudgets();
+      }
+
+      return { synced: true, count: this.expenses.length };
+    } catch (err) {
+      console.warn('[Store] Failed to sync with backend:', err.message);
+      return { synced: false, error: err.message };
+    }
   }
 }
 

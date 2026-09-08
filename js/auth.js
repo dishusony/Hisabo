@@ -4,6 +4,8 @@
  * and direct Gmail sign-in with full theme integration.
  */
 
+import { api } from './api.js';
+
 const STORAGE_KEYS = {
   USER: 'hisabo_auth_user_v1',
   CLIENT_ID: 'hisabo_google_client_id_v1'
@@ -188,6 +190,11 @@ class AuthService {
     };
 
     this.setCurrentUser(user);
+    if (typeof fetch !== 'undefined') {
+      api.login({ credential: response.credential }).catch(e => {
+        console.warn('[Auth] Backend sync note:', e.message);
+      });
+    }
     return user;
   }
 
@@ -216,6 +223,11 @@ class AuthService {
     };
 
     this.setCurrentUser(user);
+    if (typeof fetch !== 'undefined') {
+      api.login({ email: cleanEmail, name: displayName, picture: avatar }).catch(e => {
+        console.warn('[Auth] Backend sync note:', e.message);
+      });
+    }
     return user;
   }
 
@@ -304,6 +316,9 @@ class AuthService {
       } catch (e) {
         // Ignore GIS shutdown errors
       }
+    }
+    if (typeof fetch !== 'undefined') {
+      api.logout().catch(() => {});
     }
     this.setCurrentUser(null);
   }

@@ -41,10 +41,13 @@ class AppController {
     authService.init();
 
     // Listen for auth state changes
-    authService.onAuthStateChanged((user) => {
+    authService.onAuthStateChanged(async (user) => {
       store.setCurrentUser(user);
       updateAuthUI(user, store);
-      if (this.activeTab === 'expenses') {
+      if (user) {
+        await store.syncWithBackend();
+        this.render();
+      } else if (this.activeTab === 'expenses') {
         this.renderTableAndSummary();
       }
     });

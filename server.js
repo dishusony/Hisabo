@@ -1,12 +1,20 @@
 // ==============================================================================
-// Hisabo - Secure Local & Production Node.js Server
-// Ensures that environment secrets (.env) are NEVER exposed or leaked to client browsers.
+// Hisabo - Production Node.js & Express Server
+// RESTful Backend APIs, SQLite Persistence, Security & Static Assets
 // ==============================================================================
 
-import http from 'node:http';
+import express from 'express';
+import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Import Routes & Middleware
+import authRoutes from './backend/routes/auth.routes.js';
+import expensesRoutes from './backend/routes/expenses.routes.js';
+import budgetsRoutes from './backend/routes/budgets.routes.js';
+import analyticsRoutes from './backend/routes/analytics.routes.js';
+import { errorHandler } from './backend/middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,118 +44,89 @@ if (fs.existsSync(envPath)) {
 const PORT = parseInt(process.env.APP_PORT || process.env.PORT || '3000', 10);
 const HOST = '0.0.0.0';
 
-// MIME types for permitted public static assets
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf'
-};
+const app = express();
 
-// Explicit blacklist of protected server/secret files that must NEVER be served to the browser
+// Security Headers applied to every request
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Explicit blacklist of protected server/secret files that must NEVER be served
 const FORBIDDEN_PATTERNS = [
   /^\/\.env/i,          // .env, .env.local, .env.production, etc.
   /^\/\.git/i,          // .git internal metadata
   /^\/\.gitignore/i,    // gitignore
   /^\/package.*\.json/i,// package.json, package-lock.json
   /^\/server\.js/i,     // server source code
+  /^\/backend\//i,      // backend source code
   /^\/secrets\//i,      // any private secrets folder
   /\.pem$/i,            // certificates and private keys
   /\.key$/i,
   /\.token$/i,
+  /\.sqlite(-.*)?$/i,   // raw database files
   /\.log$/i             // server logs
 ];
 
-const server = http.createServer((req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  let pathname = decodeURIComponent(parsedUrl.pathname);
-
-  // Security Headers applied to every response
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-
-  // 1. Safe Public Health API (NEVER returns any secret keys or tokens)
-  if (pathname === '/api/status') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'active',
-      app: 'Hisabo',
-      env: process.env.APP_ENV || 'production',
-      timestamp: new Date().toISOString()
-    }));
-    return;
-  }
-
-  // 1b. Safe Public Auth Config API (Public Client ID only, never secrets)
-  if (pathname === '/api/auth/config') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      googleClientId: process.env.GOOGLE_CLIENT_ID || ''
-    }));
-    return;
-  }
-
-  // 2. Strict Security Check: Block all requests attempting to access .env or sensitive files
+app.use((req, res, next) => {
+  const pathname = decodeURIComponent(req.path);
   const isForbidden = FORBIDDEN_PATTERNS.some((pattern) => pattern.test(pathname)) ||
-                      pathname.includes('..') || // prevent directory traversal
-                      pathname.split('/').some(segment => segment.startsWith('.') && segment !== '.' && segment !== '..'); // block any dotfile
+                      pathname.includes('..') ||
+                      pathname.split('/').some(segment => segment.startsWith('.') && segment !== '.' && segment !== '..');
 
   if (isForbidden) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('403 Forbidden: Access to protected configuration or secret files is strictly denied.');
-    return;
+    return res.status(403).type('text/plain; charset=utf-8').send('403 Forbidden: Access to protected configuration or secret files is strictly denied.');
   }
+  next();
+});
 
-  // 3. Map default root to index.html
-  if (pathname === '/' || pathname === '') {
-    pathname = '/index.html';
-  }
+// Parsers & Cross-Origin
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  const safePath = path.normalize(path.join(__dirname, pathname));
-
-  // Ensure file resides within the application root directory
-  if (!safePath.startsWith(__dirname)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('403 Forbidden');
-    return;
-  }
-
-  // Check if file exists
-  fs.stat(safePath, (err, stats) => {
-    if (err || !stats.isFile()) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('404 Not Found');
-      return;
-    }
-
-    const ext = path.extname(safePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-
-    res.writeHead(200, {
-      'Content-Type': contentType,
-      'Content-Length': stats.size,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600'
-    });
-
-    const stream = fs.createReadStream(safePath);
-    stream.pipe(res);
+// Safe Public Health API
+app.get('/api/status', (req, res) => {
+  res.json({
+    status: 'active',
+    app: 'Hisabo',
+    env: process.env.APP_ENV || 'production',
+    timestamp: new Date().toISOString()
   });
 });
 
-server.listen(PORT, HOST, () => {
+// Mount Modular REST API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/expenses', expensesRoutes);
+app.use('/api/budgets', budgetsRoutes);
+app.use('/api/analytics', analyticsRoutes);
+
+// Static Asset Serving
+app.use(express.static(__dirname, {
+  dotfiles: 'deny',
+  index: 'index.html',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  }
+}));
+
+// Centralized Error Handler
+app.use(errorHandler);
+
+// Start Server
+const server = app.listen(PORT, HOST, () => {
   console.log(`====================================================`);
-  console.log(` ✨ Hisabo Server Running at http://localhost:${PORT}`);
-  console.log(` 🔒 Security: .env & secrets are strictly protected`);
+  console.log(` ✨ Hisabo Express Server Running at http://localhost:${PORT}`);
+  console.log(` 🚀 RESTful APIs mounted at /api/*`);
+  console.log(` 🔒 Security: .env & backend code are strictly protected`);
   console.log(`====================================================`);
 });
+
+export { app, server };

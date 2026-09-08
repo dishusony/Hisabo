@@ -23,6 +23,13 @@ credentials.json
 *.env.tmp
 *.zip
 
+# Database files
+data/
+*.sqlite
+*.sqlite-*
+*.db
+
+
 # Dependencies
 node_modules/
 package-lock.json
@@ -51,6 +58,7 @@ test_runner.js
 test_security.js
 test_auth_integration.js
 test_refresh_persistence.js
+test_backend_api.js
 push_to_github.bat
 setup_git.ps1
 
