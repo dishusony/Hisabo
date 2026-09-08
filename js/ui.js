@@ -517,14 +517,14 @@ export function updateAuthUI(user, store) {
       if (dropdown) dropdown.classList.remove('active');
     }
 
-    if (toolsAccountTitle) toolsAccountTitle.textContent = 'Email Account Required';
-    if (toolsAccountDesc) toolsAccountDesc.textContent = 'Sign in with your verified email to access your expenses and activate budget tracking.';
+    if (toolsAccountTitle) toolsAccountTitle.textContent = 'Real Gmail Account Required';
+    if (toolsAccountDesc) toolsAccountDesc.textContent = 'Enter with your compulsory Full Name and real Gmail to access your expenses and activate budget tracking.';
     if (toolsAccountBtn) {
-      toolsAccountBtn.textContent = 'Sign In to Enter';
+      toolsAccountBtn.textContent = 'Log In / Sign Up to Enter';
     }
 
     const toolsAlertEmail = document.getElementById('toolsAlertEmailDisplay');
-    if (toolsAlertEmail) toolsAlertEmail.textContent = 'Sign in required';
+    if (toolsAlertEmail) toolsAlertEmail.textContent = 'Real Gmail required';
 
     // Entrance gate adjustments when unauthenticated
     const closeBtn = document.getElementById('authModalCloseBtn');
@@ -533,8 +533,8 @@ export function updateAuthUI(user, store) {
     const modalSubtitle = document.getElementById('authModalSubtitle');
     if (closeBtn) closeBtn.style.display = 'none';
     if (gateBanner) gateBanner.style.display = 'flex';
-    if (modalTitle) modalTitle.textContent = 'Verify Email to Enter Hisabo';
-    if (modalSubtitle) modalSubtitle.textContent = 'Only valid email addresses can enter & receive budget alerts';
+    if (modalTitle) modalTitle.textContent = 'Log In to Hisabo';
+    if (modalSubtitle) modalSubtitle.textContent = 'Real Gmail address & compulsory Full Name required';
   }
 }
 

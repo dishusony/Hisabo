@@ -204,22 +204,26 @@ class AuthService {
   }
 
   /**
-   * Direct Gmail / Email Login with Strict Validation
-   * Ensures only users with genuinely valid email addresses can enter Hisabo.
+   * Direct Gmail Login & Sign Up with Compulsory Name and Real Gmail Validation
+   * Ensures only users with genuinely valid @gmail.com addresses and full names can enter Hisabo.
    */
-  async loginWithGmail(email, name = '', picture = '') {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail || !this.validateEmail(cleanEmail)) {
-      throw new Error('Only valid email addresses are permitted (e.g. name@example.com). Please check your email and try again.');
+  async loginWithGmail(email, name = '', mode = 'login', picture = '') {
+    const displayName = (name || '').trim();
+    if (!this.validateName(displayName)) {
+      throw new Error('Full Name is compulsory (minimum 2 characters).');
     }
 
-    const displayName = (name || '').trim() || this.extractNameFromEmail(cleanEmail);
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !this.validateGmail(cleanEmail)) {
+      throw new Error('Only valid real Gmail addresses (@gmail.com) are allowed.');
+    }
+
     const avatar = picture || this.generateAvatarUrl(displayName);
 
     let backendUser = null;
     if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
       try {
-        const res = await api.login({ email: cleanEmail, name: displayName, picture: avatar });
+        const res = await api.login({ email: cleanEmail, name: displayName, picture: avatar, mode });
         backendUser = res.user;
       } catch (err) {
         // If server explicitly returned validation error (400)
@@ -243,6 +247,46 @@ class AuthService {
 
     this.setCurrentUser(user);
     return user;
+  }
+
+  /**
+   * Compulsory Name Validation:
+   * String with trimmed length between 2 and 70 characters and at least one alphabetical letter.
+   */
+  validateName(name) {
+    if (!name || typeof name !== 'string') return false;
+    const trimmed = name.trim();
+    if (trimmed.length < 2 || trimmed.length > 70) return false;
+    if (!/[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]/.test(trimmed)) return false;
+    return true;
+  }
+
+  /**
+   * Strict Real Gmail Validation:
+   * Must be valid RFC 5322 email with domain 'gmail.com' or 'googlemail.com'
+   * and username length 6 to 30 alphanumeric characters / dots.
+   */
+  validateGmail(email) {
+    if (!this.validateEmail(email)) return false;
+    const clean = email.trim().toLowerCase();
+    const parts = clean.split('@');
+    if (parts.length !== 2) return false;
+
+    const [localPart, domainPart] = parts;
+    if (domainPart !== 'gmail.com' && domainPart !== 'googlemail.com') {
+      return false;
+    }
+
+    if (!/^[a-z0-9.]+$/.test(localPart)) {
+      return false;
+    }
+
+    const alphanumeric = localPart.replace(/\./g, '');
+    if (alphanumeric.length < 6 || alphanumeric.length > 30) {
+      return false;
+    }
+
+    return true;
   }
 
   /**

@@ -29,6 +29,7 @@ class AppController {
     this.categoryFilter = 'All';
     this.sortOption = 'date-desc';
     this.activeTab = 'expenses';
+    this.currentAuthMode = 'login';
 
     this.initTheme();
     initCharts();
@@ -36,6 +37,62 @@ class AppController {
     this.initAuth();
     this.initEventListeners();
     this.render();
+  }
+
+  setAuthMode(mode = 'login') {
+    this.currentAuthMode = mode === 'signup' ? 'signup' : 'login';
+    const isSignup = this.currentAuthMode === 'signup';
+
+    const loginTab = document.getElementById('authTabLogin');
+    const signupTab = document.getElementById('authTabSignup');
+    if (loginTab) {
+      loginTab.classList.toggle('active', !isSignup);
+      loginTab.setAttribute('aria-selected', (!isSignup).toString());
+    }
+    if (signupTab) {
+      signupTab.classList.toggle('active', isSignup);
+      signupTab.setAttribute('aria-selected', isSignup.toString());
+    }
+
+    if (!authService.isAuthenticated()) {
+      const modalTitle = document.getElementById('authModalTitle');
+      const modalSubtitle = document.getElementById('authModalSubtitle');
+      if (modalTitle) {
+        modalTitle.textContent = isSignup ? 'Sign Up for Hisabo' : 'Log In to Hisabo';
+      }
+      if (modalSubtitle) {
+        modalSubtitle.textContent = isSignup
+          ? 'Create your free account with compulsory Full Name and real Gmail'
+          : 'Real Gmail address & compulsory Full Name required';
+      }
+    }
+
+    const dividerLabel = document.getElementById('authDividerLabel');
+    if (dividerLabel) {
+      dividerLabel.textContent = isSignup ? 'OR SIGN UP WITH REAL GMAIL' : 'OR LOG IN WITH REAL GMAIL';
+    }
+
+    const submitBtn = document.getElementById('gmailSubmitBtn');
+    if (submitBtn) {
+      submitBtn.textContent = isSignup ? 'Create Account & Enter' : 'Log In to Hisabo';
+    }
+
+    const toggleText = document.getElementById('authModeToggleText');
+    const toggleLink = document.getElementById('authModeToggleLink');
+    if (toggleText) {
+      toggleText.textContent = isSignup ? 'Already have an account?' : "Don't have an account?";
+    }
+    if (toggleLink) {
+      toggleLink.textContent = isSignup ? 'Log In here' : 'Sign Up here';
+    }
+
+    const errorBox = document.getElementById('gmailInputError');
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+    document.getElementById('gmailInput')?.classList.remove('form-input-error');
+    document.getElementById('gmailNameInput')?.classList.remove('form-input-error');
   }
 
   initAuth() {
@@ -51,6 +108,7 @@ class AppController {
         this.render();
       } else {
         // Enforce Entrance Gate: only valid email can enter
+        this.setAuthMode('login');
         openModal('authModal');
         if (this.activeTab === 'expenses') {
           this.renderTableAndSummary();
@@ -60,6 +118,7 @@ class AppController {
 
     // Check on initial startup: if not authenticated, trigger Entrance Gate
     if (!authService.isAuthenticated()) {
+      this.setAuthMode('login');
       openModal('authModal');
     }
 
@@ -278,6 +337,7 @@ class AppController {
     // Gmail & Google Authentication Event Listeners
     // ========================================================================
     document.getElementById('googleSignInBtn')?.addEventListener('click', () => {
+      this.setAuthMode('login');
       openModal('authModal');
     });
 
@@ -287,8 +347,23 @@ class AppController {
         dropdown?.classList.toggle('active');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
+        this.setAuthMode('login');
         openModal('authModal');
       }
+    });
+
+    // Auth Mode Segmented Tab Switchers
+    document.getElementById('authTabLogin')?.addEventListener('click', () => {
+      this.setAuthMode('login');
+    });
+
+    document.getElementById('authTabSignup')?.addEventListener('click', () => {
+      this.setAuthMode('signup');
+    });
+
+    document.getElementById('authModeToggleLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.setAuthMode(this.currentAuthMode === 'signup' ? 'login' : 'signup');
     });
 
     // User Profile Dropdown Toggle
@@ -325,6 +400,7 @@ class AppController {
     // Switch Account
     document.getElementById('switchAccountBtn')?.addEventListener('click', () => {
       profileDropdown?.classList.remove('active');
+      this.setAuthMode('login');
       openModal('authModal');
     });
 
@@ -344,7 +420,7 @@ class AppController {
       }
     });
 
-    // Direct Gmail / Email Sign In Form (Strict Validation Entrance Gate)
+    // Direct Gmail Sign In & Sign Up Form (Compulsory Name & Real Gmail Validation)
     document.getElementById('gmailLoginForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const emailInput = document.getElementById('gmailInput');
@@ -355,34 +431,57 @@ class AppController {
       const rawEmail = (emailInput?.value || '').trim();
       const rawName = (nameInput?.value || '').trim();
 
-      // Client-side strict validation check
-      if (!authService.validateEmail(rawEmail)) {
+      // Compulsory Full Name validation
+      if (!authService.validateName(rawName)) {
         if (errorBox) {
-          errorBox.textContent = '❌ Access Denied: Only valid email addresses can enter Hisabo (e.g. name@example.com). Please check your email and try again.';
+          errorBox.textContent = '❌ Compulsory: Please enter your Full Name (minimum 2 characters, letters required).';
+          errorBox.style.display = 'block';
+        }
+        if (nameInput) {
+          nameInput.classList.add('form-input-error');
+          nameInput.focus();
+        }
+        showToast('Full Name is compulsory (minimum 2 characters).', 'error');
+        return;
+      }
+      if (nameInput) nameInput.classList.remove('form-input-error');
+
+      // Compulsory Real Gmail validation
+      if (!authService.validateGmail(rawEmail)) {
+        if (errorBox) {
+          errorBox.textContent = '❌ Access Denied: Only valid real Gmail addresses (@gmail.com) are allowed to enter Hisabo (e.g. yourname@gmail.com).';
           errorBox.style.display = 'block';
         }
         if (emailInput) {
           emailInput.classList.add('form-input-error');
           emailInput.focus();
         }
-        showToast('Only valid email addresses can enter Hisabo.', 'error');
+        showToast('Only valid real Gmail addresses (@gmail.com) are allowed.', 'error');
         return;
       }
-
-      // Valid email: clear error state
-      if (errorBox) errorBox.style.display = 'none';
       if (emailInput) emailInput.classList.remove('form-input-error');
+
+      // Inputs valid: clear error box
+      if (errorBox) {
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+      }
 
       const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = 'Verifying Email & Entering...';
+        submitBtn.innerHTML = this.currentAuthMode === 'signup'
+          ? 'Creating Account & Entering...'
+          : 'Verifying Gmail & Entering...';
       }
 
       try {
-        const user = await authService.loginWithGmail(rawEmail, rawName);
+        const user = await authService.loginWithGmail(rawEmail, rawName, this.currentAuthMode || 'login');
         closeModal('authModal');
-        showToast(`🎉 Access Granted! Welcome, ${user.givenName || user.name}!`);
+        const greeting = this.currentAuthMode === 'signup'
+          ? `🎉 Welcome to Hisabo, ${user.givenName || user.name}! Account created.`
+          : `🎉 Access Granted! Welcome back, ${user.givenName || user.name}!`;
+        showToast(greeting);
         this.render();
       } catch (err) {
         if (errorBox) {
@@ -398,15 +497,15 @@ class AppController {
       }
     });
 
-    // 1-Tap Quick Verified Demo Accounts
+    // 1-Tap Quick Verified Demo Accounts (Real Gmail Accounts)
     document.querySelectorAll('.quick-account-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const email = btn.dataset.demoEmail;
         const name = btn.dataset.demoName;
         try {
-          const user = await authService.loginWithGmail(email, name);
+          const user = await authService.loginWithGmail(email, name, this.currentAuthMode || 'login');
           closeModal('authModal');
-          showToast(`Access Granted! Welcome, ${user.name}!`);
+          showToast(`🎉 Access Granted! Welcome, ${user.name}!`);
           this.render();
         } catch (err) {
           showToast(err.message, 'error');

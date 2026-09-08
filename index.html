@@ -496,7 +496,7 @@
           </div>
           <div>
             <h3 class="modal-title" id="authModalTitle">Welcome to Hisabo</h3>
-            <p class="modal-subtitle" id="authModalSubtitle">Only valid email addresses can enter &amp; receive budget alerts</p>
+            <p class="modal-subtitle" id="authModalSubtitle">Real Gmail address &amp; compulsory Full Name required</p>
           </div>
         </div>
         <button class="modal-close-btn" id="authModalCloseBtn" data-close-modal="authModal" aria-label="Close dialog">&times;</button>
@@ -509,8 +509,20 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </div>
           <div class="gate-text">
-            <strong>Entrance Gate Active:</strong> Enter your valid email address to unlock your expense dashboard and enable automatic 50%, 90%, and 100% budget milestone alerts via Gmail.
+            <strong>Real Gmail Gate Active:</strong> Only verified real Gmail accounts (@gmail.com) with a valid compulsory Full Name can enter Hisabo and receive automatic 50%, 90%, and 100% budget milestone alerts.
           </div>
+        </div>
+
+        <!-- Segmented Log In / Sign Up Mode Switcher -->
+        <div class="auth-mode-tabs" role="tablist" aria-label="Authentication Mode">
+          <button type="button" id="authTabLogin" class="auth-mode-tab active" role="tab" aria-selected="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            <span>Log In</span>
+          </button>
+          <button type="button" id="authTabSignup" class="auth-mode-tab" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+            <span>Sign Up</span>
+          </button>
         </div>
 
         <!-- Official Google Sign-In Container (GSI) -->
@@ -522,7 +534,7 @@
         <!-- 1-Tap Quick Gmail Verified Demo Accounts -->
         <div class="quick-login-section">
           <label class="form-label" style="margin-bottom: 0.55rem; display: flex; justify-content: space-between; align-items: center;">
-            <span>1-Tap Instant Entry (Valid Accounts)</span>
+            <span>1-Tap Instant Entry (Real Gmail Verified)</span>
             <span style="font-size: 0.72rem; color: var(--primary); font-weight: 600;">Verified Demo</span>
           </label>
           <div class="quick-accounts-grid">
@@ -545,32 +557,42 @@
           </div>
         </div>
 
-        <div class="auth-divider"><span>OR ENTER VALID EMAIL</span></div>
+        <div class="auth-divider"><span id="authDividerLabel">OR LOG IN WITH REAL GMAIL</span></div>
 
-        <!-- Direct Email Entry Form (Strict Validation) -->
+        <!-- Direct Gmail Entry Form (Strict Validation & Compulsory Name) -->
         <form id="gmailLoginForm" class="gmail-form" novalidate>
           <div id="gmailInputError" class="auth-error-alert" style="display: none;"></div>
 
           <div class="form-group">
-            <label class="form-label" for="gmailInput">Valid Email Address *</label>
+            <label class="form-label" for="gmailNameInput">
+              Full Name * <span class="badge-required">Compulsory</span>
+            </label>
             <div class="input-with-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <input type="email" id="gmailInput" class="form-control" placeholder="e.g. yourname@gmail.com" required autocomplete="email">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input type="text" id="gmailNameInput" class="form-control" placeholder="e.g. MS Dhoni" autocomplete="name" required minlength="2">
             </div>
-            <span class="input-subhint">Must be a valid email format (RFC 5322 compliant, valid domain &amp; TLD).</span>
+            <span class="input-subhint">Full Name is compulsory for both Log In and Sign Up (minimum 2 characters).</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="gmailNameInput">Your Name (Optional)</label>
+            <label class="form-label" for="gmailInput">
+              Real Gmail Address * <span class="badge-required">Compulsory</span>
+            </label>
             <div class="input-with-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <input type="text" id="gmailNameInput" class="form-control" placeholder="e.g. MS Dhoni" autocomplete="name">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <input type="email" id="gmailInput" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
             </div>
+            <span class="input-subhint">Must be a real Gmail address (@gmail.com). Alerts (50%, 90%, 100%) delivered here.</span>
           </div>
 
           <button type="submit" id="gmailSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 0.95rem;">
-            Verify Email &amp; Enter Hisabo
+            Log In to Hisabo
           </button>
+
+          <div class="auth-mode-toggle-wrap">
+            <span id="authModeToggleText">Don't have an account?</span>
+            <button type="button" id="authModeToggleLink" class="auth-toggle-link-btn">Create Account (Sign Up)</button>
+          </div>
         </form>
 
         <!-- Advanced: Google Client ID Setup Accordion -->
