@@ -1,10 +1,18 @@
 /**
- * api/index.js - Vercel Serverless Function Handler
- * Forwards incoming HTTP requests to Express app.
+ * api/index.js - Vercel Serverless Function Handler with Diagnostic Reporting
  */
 
-import { app } from '../server.js';
-
-export default function handler(req, res) {
-  return app(req, res);
+export default async function handler(req, res) {
+  try {
+    const { app } = await import('../server.js');
+    return app(req, res);
+  } catch (err) {
+    console.error('[Vercel Serverless Error]:', err);
+    return res.status(500).json({
+      error: 'Serverless initialization error',
+      message: err?.message,
+      stack: err?.stack,
+      nodeVersion: process.version
+    });
+  }
 }
