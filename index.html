@@ -747,7 +747,7 @@
         <h3 class="modal-title" id="expenseModalTitle">Add New Expense</h3>
         <button class="modal-close-btn" data-close-modal="expenseModal" aria-label="Close dialog">&times;</button>
       </div>
-      <form id="expenseForm">
+      <form id="expenseForm" novalidate>
         <div class="modal-body">
           <!-- Big Prominent Amount Field -->
           <div class="form-group">
@@ -766,7 +766,7 @@
             </div>
             <div class="form-group" style="flex: 1;">
               <label class="form-label" for="expenseDate">Date *</label>
-              <input type="date" id="expenseDate" name="expenseDate" class="form-control" required>
+              <input type="date" id="expenseDate" name="expenseDate" class="form-control">
             </div>
           </div>
 
@@ -777,7 +777,7 @@
               <!-- Dynamically populated interactive pills in ui.js -->
             </div>
             <!-- Hidden native select for form data -->
-            <select id="expenseCategory" name="expenseCategory" style="display: none;" required></select>
+            <select id="expenseCategory" name="expenseCategory" style="display: none;"></select>
           </div>
 
           <!-- 1-Tap Payment Method Selector Pills -->
@@ -787,7 +787,7 @@
               <!-- Dynamically populated interactive pills in ui.js -->
             </div>
             <!-- Hidden native select for form data -->
-            <select id="expensePayment" name="expensePayment" style="display: none;" required></select>
+            <select id="expensePayment" name="expensePayment" style="display: none;"></select>
           </div>
 
           <!-- Notes (Optional) -->

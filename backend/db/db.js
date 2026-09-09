@@ -27,8 +27,13 @@ if (!dbPath) {
 const db = new DatabaseSync(dbPath);
 
 // Performance & Integrity settings
-db.exec('PRAGMA journal_mode = WAL;');
+if (process.env.VERCEL) {
+  try { db.exec('PRAGMA journal_mode = DELETE;'); } catch (e) {}
+} else {
+  try { db.exec('PRAGMA journal_mode = WAL;'); } catch (e) {}
+}
 db.exec('PRAGMA foreign_keys = ON;');
+db.exec('PRAGMA busy_timeout = 5000;');
 
 // Initialize tables
 db.exec(`

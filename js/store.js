@@ -347,6 +347,10 @@ class ExpenseStore {
     return totals;
   }
 
+  getCategoryBreakdown(monthKey = this.selectedMonth) {
+    return this.getCategoryTotals(monthKey);
+  }
+
   getPaymentMethodBreakdown(monthKey = this.selectedMonth) {
     const list = this.getExpensesForMonth(monthKey);
     const totals = {};
@@ -364,6 +368,26 @@ class ExpenseStore {
     return totals;
   }
 
+  getDailySpending(monthKey = this.selectedMonth) {
+    const list = this.getExpensesForMonth(monthKey);
+    const daily = {};
+    const parts = (monthKey || '').split('-').map(Number);
+    const y = parts[0] || new Date().getFullYear();
+    const m = parts[1] || (new Date().getMonth() + 1);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${monthKey}-${String(day).padStart(2, '0')}`;
+      daily[dayStr] = 0;
+    }
+    list.forEach(item => {
+      const date = item.date;
+      if (date && date.startsWith(monthKey)) {
+        daily[date] = (daily[date] || 0) + (Number(item.amount) || 0);
+      }
+    });
+    return daily;
+  }
+
   getMonthlyTrends(limit = 6) {
     const allMonths = this.getDistinctMonths();
     const targetMonths = allMonths.slice(0, limit).reverse();
@@ -378,6 +402,31 @@ class ExpenseStore {
         budget
       };
     });
+  }
+
+  getHistoricalMonthlyComparison(limit = 6) {
+    const allMonths = this.getDistinctMonths();
+    const targetMonths = allMonths.slice(0, limit).reverse();
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return targetMonths.map(monthKey => {
+      const list = this.getExpensesForMonth(monthKey);
+      const totalSpent = list.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const budget = this.getBudget(monthKey);
+      const [y, m] = monthKey.split('-');
+      const date = new Date(Number(y), Number(m) - 1, 1);
+      const label = `${monthNames[date.getMonth()]} '${String(y).slice(-2)}`;
+      return {
+        monthKey,
+        label,
+        totalSpent: Math.round(totalSpent * 100) / 100,
+        budget
+      };
+    });
+  }
+
+  migrateGuestDataToUser(email) {
+    return 0;
   }
 
   getInsights(monthKey = this.selectedMonth) {

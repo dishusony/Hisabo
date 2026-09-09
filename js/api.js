@@ -70,8 +70,12 @@ class ApiService {
 
     const data = isJson ? await res.json() : await res.text();
 
-    if (!res.ok) {
-      const msg = (isJson && data?.error) ? data.error : `HTTP ${res.status}: ${res.statusText}`;
+    if (!res.ok || (!isJson && typeof data === 'string' && data.trim().startsWith('<'))) {
+      const msg = (isJson && data?.error)
+        ? data.error
+        : (data && typeof data === 'string' && data.trim().startsWith('<'))
+          ? 'Backend API route is offline or returned HTML fallback'
+          : `HTTP ${res.status}: ${res.statusText}`;
       const err = new Error(msg);
       err.status = res.status;
       err.data = data;

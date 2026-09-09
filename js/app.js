@@ -35,14 +35,16 @@ class AppController {
     this.sortOption = 'date-desc';
     this.activeTab = 'expenses';
     this.currentAuthMode = 'login';
+    this.store = store;
+    this.authService = authService;
 
-    this.initTheme();
-    initCharts();
-    initRipples();
-    this.initDOM();
-    this.initAuth();
-    this.initEventListeners();
-    this.render();
+    try { this.initTheme(); } catch (e) { console.warn('[Init] Theme warning:', e); }
+    try { initCharts(); } catch (e) { console.warn('[Init] Charts warning:', e); }
+    try { initRipples(); } catch (e) { console.warn('[Init] Ripples warning:', e); }
+    try { this.initDOM(); } catch (e) { console.warn('[Init] DOM warning:', e); }
+    try { this.initAuth(); } catch (e) { console.warn('[Init] Auth warning:', e); }
+    try { this.initEventListeners(); } catch (e) { console.warn('[Init] Event listeners warning:', e); }
+    try { this.render(); } catch (e) { console.warn('[Init] Render warning:', e); }
     setTimeout(() => this.checkMailStatus(), 400);
   }
 
@@ -284,7 +286,13 @@ class AppController {
       card.classList.toggle('active', card.dataset.setTheme === activeTheme);
     });
 
-    refreshAllCharts(store);
+    if (this.activeTab === 'analytics') {
+      try {
+        refreshAllCharts(store);
+      } catch (err) {
+        console.warn('[Theme] Chart refresh deferred:', err);
+      }
+    }
   }
 
   initDOM() {
@@ -981,7 +989,7 @@ class AppController {
   async handleExpenseSubmit(e) {
     e.preventDefault();
     const form = e.target;
-    const date = form.expenseDate.value;
+    const date = (form.expenseDate && form.expenseDate.value) ? form.expenseDate.value : new Date().toISOString().split('T')[0];
     const item = form.expenseItem.value.trim();
     const amount = parseFloat(form.expenseAmount.value);
     const category = form.expenseCategory.value || 'Food';
@@ -995,11 +1003,6 @@ class AppController {
 
     if (!item) {
       showToast('Please enter what you purchased', 'error');
-      return;
-    }
-
-    if (!date) {
-      showToast('Please select a valid date', 'error');
       return;
     }
 

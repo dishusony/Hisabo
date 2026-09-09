@@ -8,6 +8,9 @@
     "dev": "node server.js",
     "build": "echo Static build ready"
   },
+  "engines": {
+    "node": "22.x"
+  },
   "keywords": [
     "expense-tracker",
     "finance",
