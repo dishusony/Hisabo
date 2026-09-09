@@ -106,6 +106,7 @@ class ExpenseStore {
    */
   async loadFromDatabase() {
     if (typeof fetch === 'undefined' || !api?.hasToken || !api.hasToken()) {
+      this.loadLocalFallback();
       return false;
     }
 
@@ -119,11 +120,35 @@ class ExpenseStore {
       if (budgets && typeof budgets === 'object') {
         this.budgets = { ...this.budgets, ...budgets };
       }
+      this.saveLocalFallback();
       return true;
     } catch (err) {
-      console.warn('[Store] Could not load expenses from database:', err.message);
+      console.warn('[Store] Could not load expenses from database, loading local fallback:', err.message);
+      this.loadLocalFallback();
       return false;
     }
+  }
+
+  saveLocalFallback() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const key = this.currentUser?.email ? `hisabo_expenses_${this.currentUser.email}` : 'hisabo_expenses_guest';
+      localStorage.setItem(key, JSON.stringify(this.expenses));
+    } catch (e) {}
+  }
+
+  loadLocalFallback() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const key = this.currentUser?.email ? `hisabo_expenses_${this.currentUser.email}` : 'hisabo_expenses_guest';
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          this.expenses = parsed;
+        }
+      }
+    } catch (e) {}
   }
 
   getAllExpenses() {
@@ -168,8 +193,18 @@ class ExpenseStore {
 
     let newExpense;
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      // Save directly to the backend database
-      newExpense = await api.createExpense(payload);
+      try {
+        // Save directly to the backend database
+        newExpense = await api.createExpense(payload);
+      } catch (err) {
+        console.warn('[Store] Backend database sync unavailable, using local store:', err.message);
+        newExpense = {
+          id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          ...payload,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+      }
     } else {
       // Offline / guest fallback
       newExpense = {
@@ -181,6 +216,7 @@ class ExpenseStore {
     }
 
     this.expenses.unshift(newExpense);
+    this.saveLocalFallback();
     return newExpense;
   }
 
@@ -211,7 +247,16 @@ class ExpenseStore {
 
     let updatedExpense;
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      updatedExpense = await api.updateExpense(id, updatePayload);
+      try {
+        updatedExpense = await api.updateExpense(id, updatePayload);
+      } catch (err) {
+        console.warn('[Store] Backend update failed, updating locally:', err.message);
+        updatedExpense = {
+          ...this.expenses[index],
+          ...updatePayload,
+          updatedAt: Date.now()
+        };
+      }
     } else {
       updatedExpense = {
         ...this.expenses[index],
@@ -221,6 +266,7 @@ class ExpenseStore {
     }
 
     this.expenses[index] = updatedExpense;
+    this.saveLocalFallback();
     return updatedExpense;
   }
 
@@ -229,13 +275,18 @@ class ExpenseStore {
    */
   async deleteExpense(id) {
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      await api.deleteExpense(id);
+      try {
+        await api.deleteExpense(id);
+      } catch (err) {
+        console.warn('[Store] Backend delete failed, deleting locally:', err.message);
+      }
     }
     const index = this.expenses.findIndex(item => item.id === id);
     let removed = null;
     if (index !== -1) {
       removed = this.expenses.splice(index, 1)[0];
     }
+    this.saveLocalFallback();
     return removed;
   }
 
