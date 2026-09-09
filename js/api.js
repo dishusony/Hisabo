@@ -85,6 +85,42 @@ class ApiService {
   // Auth APIs
   // ============================================================================
 
+  async sendOtp(payload) {
+    return this.request('/api/auth/send-otp', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  async signup(payload) {
+    const data = await this.request('/api/auth/signup', {
+      method: 'POST',
+      body: payload
+    });
+    if (data.token) {
+      this.setToken(data.token);
+    }
+    return data;
+  }
+
+  async verifyOtp(payload) {
+    const data = await this.request('/api/auth/verify-otp', {
+      method: 'POST',
+      body: payload
+    });
+    if (data.token) {
+      this.setToken(data.token);
+    }
+    return data;
+  }
+
+  async resendOtp(payload) {
+    return this.request('/api/auth/resend-otp', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   async login(credentials) {
     const data = await this.request('/api/auth/login', {
       method: 'POST',
@@ -94,6 +130,23 @@ class ApiService {
       this.setToken(data.token);
     }
     return data;
+  }
+
+  async configureMail(config) {
+    return await this.request('/api/auth/configure-mail', {
+      method: 'POST',
+      body: config
+    });
+  }
+
+  async enableDevMode() {
+    return await this.request('/api/auth/enable-dev-mode', {
+      method: 'POST'
+    });
+  }
+
+  async getMailStatus() {
+    return await this.request('/api/auth/mail-status');
   }
 
   async getMe() {

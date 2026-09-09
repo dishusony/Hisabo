@@ -88,6 +88,17 @@ function getChartTheme() {
 export function initCharts() {
   if (typeof Chart !== 'undefined') {
     Chart.defaults.font.family = "'Outfit', 'Plus Jakarta Sans', -apple-system, sans-serif";
+    Chart.defaults.animation = {
+      duration: 1100,
+      easing: 'easeOutQuart'
+    };
+    Chart.defaults.transitions = {
+      active: {
+        animation: {
+          duration: 300
+        }
+      }
+    };
   }
 }
 

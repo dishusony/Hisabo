@@ -11,6 +11,8 @@ const STORAGE_KEYS = {
   CLIENT_ID: 'hisabo_google_client_id_v1'
 };
 
+export const INVALID_GMAIL_MESSAGE = 'Invalid Gmail address. Please enter a valid Gmail.';
+
 class AuthService {
   constructor() {
     this.currentUser = null;
@@ -216,49 +218,79 @@ class AuthService {
   }
 
   /**
-   * Direct Gmail Login & Sign Up with Compulsory Name and Real Gmail Validation
-   * Ensures only users with genuinely valid @gmail.com addresses and full names can enter Hisabo.
+   * Direct Signup with Gmail: Compulsory Full Name, strict @gmail.com address, and password.
+   * Hashes password with scrypt + salt on backend, activates account, and returns authenticated session.
    */
-  async loginWithGmail(email, name = '', mode = 'login', picture = '') {
+  async signupWithGmail({ name, email, password }) {
     const displayName = (name || '').trim();
     if (!this.validateName(displayName)) {
-      throw new Error('Full Name is compulsory (minimum 2 characters).');
+      throw new Error('Full Name is compulsory (minimum 2 characters, letters required).');
     }
 
     const cleanEmail = (email || '').trim().toLowerCase();
     if (!cleanEmail || !this.validateGmail(cleanEmail)) {
-      throw new Error('Only valid real Gmail addresses (@gmail.com) are allowed.');
+      throw new Error(INVALID_GMAIL_MESSAGE);
     }
 
-    const avatar = picture || this.generateAvatarUrl(displayName);
-
-    let backendUser = null;
-    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-      try {
-        const res = await api.login({ email: cleanEmail, name: displayName, picture: avatar, mode });
-        backendUser = res.user;
-      } catch (err) {
-        // If server explicitly returned validation error (400)
-        if (err.status === 400) {
-          throw err;
-        }
-        console.warn('[Auth] Offline / local fallback note:', err.message);
-      }
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
     }
 
-    const user = {
-      id: backendUser?.id || ('user_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')),
-      email: cleanEmail,
+    const res = await api.signup({
       name: displayName,
-      picture: avatar,
-      givenName: displayName.split(' ')[0],
-      provider: 'google',
-      isVerified: true,
-      signedInAt: new Date().toISOString()
-    };
+      email: cleanEmail,
+      password
+    });
 
-    this.setCurrentUser(user);
-    return user;
+    if (res.user) {
+      const user = {
+        id: res.user.id,
+        email: res.user.email,
+        name: res.user.name,
+        picture: res.user.picture || this.generateAvatarUrl(res.user.name || res.user.email),
+        givenName: (res.user.name || '').split(' ')[0] || res.user.name,
+        provider: 'gmail',
+        isVerified: true,
+        signedInAt: new Date().toISOString()
+      };
+      this.setCurrentUser(user);
+      return user;
+    }
+
+    return res;
+  }
+
+
+  /**
+   * Direct Gmail Login: Allows login ONLY for verified Gmail accounts.
+   */
+  async loginWithGmail(email, password = '') {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !this.validateGmail(cleanEmail)) {
+      throw new Error(INVALID_GMAIL_MESSAGE);
+    }
+
+    const res = await api.login({
+      email: cleanEmail,
+      password
+    });
+
+    if (res.user) {
+      const user = {
+        id: res.user.id,
+        email: res.user.email,
+        name: res.user.name,
+        picture: res.user.picture || this.generateAvatarUrl(res.user.name || res.user.email),
+        givenName: (res.user.name || '').split(' ')[0] || res.user.name,
+        provider: 'gmail',
+        isVerified: true,
+        signedInAt: new Date().toISOString()
+      };
+      this.setCurrentUser(user);
+      return user;
+    }
+
+    return res;
   }
 
   /**
@@ -275,17 +307,33 @@ class AuthService {
 
   /**
    * Strict Real Gmail Validation:
-   * Must be valid RFC 5322 email with domain 'gmail.com' or 'googlemail.com'
-   * and username length 6 to 30 alphanumeric characters / dots.
+   * - Must be valid RFC 5322 email ending in EXACTLY 'gmail.com'
+   * - No spaces allowed anywhere in email
+   * - Rejects missing username, missing domain, multiple @, leading/trailing/consecutive dots
+   * - Username length must be 6 to 30 alphanumeric characters / dots
    */
   validateGmail(email) {
-    if (!this.validateEmail(email)) return false;
+    if (!email || typeof email !== 'string') return false;
+
+    // Disallow whitespace anywhere
+    if (/\s/.test(email)) return false;
+
     const clean = email.trim().toLowerCase();
+    if (clean.length > 254 || clean.length < 5) return false;
+
     const parts = clean.split('@');
     if (parts.length !== 2) return false;
 
     const [localPart, domainPart] = parts;
-    if (domainPart !== 'gmail.com' && domainPart !== 'googlemail.com') {
+    if (!localPart || !domainPart) return false;
+
+    // Must be EXACTLY 'gmail.com'
+    if (domainPart !== 'gmail.com') {
+      return false;
+    }
+
+    // Local part constraints
+    if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.includes('..')) {
       return false;
     }
 

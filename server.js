@@ -121,12 +121,15 @@ app.use(express.static(__dirname, {
 app.use(errorHandler);
 
 // Start Server
-const server = app.listen(PORT, HOST, () => {
-  console.log(`====================================================`);
-  console.log(` ✨ Hisabo Express Server Running at http://localhost:${PORT}`);
-  console.log(` 🚀 RESTful APIs mounted at /api/*`);
-  console.log(` 🔒 Security: .env & backend code are strictly protected`);
-  console.log(`====================================================`);
-});
+let server = null;
+if (!process.env.VERCEL) {
+  server = app.listen(PORT, HOST, () => {
+    console.log(`====================================================`);
+    console.log(` ✨ Hisabo Express Server Running at http://localhost:${PORT}`);
+    console.log(` 🚀 RESTful APIs mounted at /api/*`);
+    console.log(` 🔒 Security: .env & backend code are strictly protected`);
+    console.log(`====================================================`);
+  });
+}
 
 export { app, server };

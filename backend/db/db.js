@@ -11,13 +11,19 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure data directory exists
-const dataDir = path.resolve(__dirname, '../../data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// Database path configuration (supports custom path and Vercel serverless /tmp fallback)
+let dbPath = process.env.DATABASE_PATH;
+if (!dbPath) {
+  if (process.env.VERCEL) {
+    dbPath = path.join('/tmp', 'hisabo.sqlite');
+  } else {
+    const dataDir = path.resolve(__dirname, '../../data');
+    if (!fs.existsSync(dataDir)) {
+      try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) {}
+    }
+    dbPath = path.join(dataDir, 'hisabo.sqlite');
+  }
 }
-
-const dbPath = path.join(dataDir, 'hisabo.sqlite');
 const db = new DatabaseSync(dbPath);
 
 // Performance & Integrity settings
@@ -86,14 +92,53 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_budget_alerts_user_month ON budget_alerts(user_id, month_key);
+
+  CREATE TABLE IF NOT EXISTS verification_codes (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    otp_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    purpose TEXT DEFAULT 'signup_verification',
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 5,
+    expires_at INTEGER NOT NULL,
+    resend_available_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_verification_email ON verification_codes(email);
+
+  CREATE TABLE IF NOT EXISTS signup_verifications (
+    token TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_signup_verif_email ON signup_verifications(email);
 `);
 
-// Migration: Ensure is_simulated column exists in older schemas
+// Migrations: Ensure newer columns exist in older databases
 try {
   db.exec('ALTER TABLE budget_alerts ADD COLUMN is_simulated INTEGER DEFAULT 0;');
-} catch (e) {
-  // Column already exists
-}
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT;');
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN password_salt TEXT;');
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0;');
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN verified_at INTEGER;');
+} catch (e) {}
 
 console.log('[Hisabo DB] SQLite Database initialized at:', dbPath);
 
@@ -112,6 +157,69 @@ export const userDAO = {
     return stmt.get(id);
   },
 
+  createUser({ id, email, name, picture, passwordHash = null, passwordSalt = null, isVerified = 0, provider = 'gmail' }) {
+    const cleanEmail = email.toLowerCase().trim();
+    const now = Date.now();
+    const stmt = db.prepare(`
+      INSERT INTO users (id, email, name, picture, provider, password_hash, password_salt, is_verified, verified_at, created_at, last_login)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    stmt.run(
+      id,
+      cleanEmail,
+      name || null,
+      picture || null,
+      provider,
+      passwordHash || null,
+      passwordSalt || null,
+      isVerified ? 1 : 0,
+      isVerified ? now : null
+    );
+    return this.findById(id);
+  },
+
+  updateUnverifiedUser(email, { name, passwordHash, passwordSalt }) {
+    const cleanEmail = email.toLowerCase().trim();
+    const stmt = db.prepare(`
+      UPDATE users 
+      SET name = COALESCE(?, name),
+          password_hash = COALESCE(?, password_hash),
+          password_salt = COALESCE(?, password_salt),
+          last_login = CURRENT_TIMESTAMP
+      WHERE email = ? AND is_verified = 0
+    `);
+    stmt.run(name || null, passwordHash || null, passwordSalt || null, cleanEmail);
+    return this.findByEmail(cleanEmail);
+  },
+
+  markVerified(email) {
+    const cleanEmail = email.toLowerCase().trim();
+    const now = Date.now();
+    const stmt = db.prepare(`
+      UPDATE users 
+      SET is_verified = 1, verified_at = ?, last_login = CURRENT_TIMESTAMP 
+      WHERE email = ?
+    `);
+    stmt.run(now, cleanEmail);
+    return this.findByEmail(cleanEmail);
+  },
+
+  updatePassword(email, passwordHash, passwordSalt) {
+    const cleanEmail = email.toLowerCase().trim();
+    const stmt = db.prepare(`
+      UPDATE users 
+      SET password_hash = ?, password_salt = ? 
+      WHERE email = ?
+    `);
+    stmt.run(passwordHash, passwordSalt, cleanEmail);
+    return this.findByEmail(cleanEmail);
+  },
+
+  updateLastLogin(id) {
+    const stmt = db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?');
+    stmt.run(id);
+  },
+
   upsertUser({ id, email, name, picture, provider = 'google' }) {
     const cleanEmail = email.toLowerCase().trim();
     const existing = this.findByEmail(cleanEmail);
@@ -119,19 +227,127 @@ export const userDAO = {
     if (existing) {
       const stmt = db.prepare(`
         UPDATE users 
-        SET name = ?, picture = ?, last_login = CURRENT_TIMESTAMP 
+        SET name = COALESCE(?, name), picture = COALESCE(?, picture), is_verified = 1, last_login = CURRENT_TIMESTAMP 
         WHERE id = ?
       `);
       stmt.run(name || existing.name || null, picture || existing.picture || null, existing.id);
       return this.findById(existing.id);
     } else {
       const stmt = db.prepare(`
-        INSERT INTO users (id, email, name, picture, provider, created_at, last_login)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO users (id, email, name, picture, provider, is_verified, verified_at, created_at, last_login)
+        VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
-      stmt.run(id, cleanEmail, name || null, picture || null, provider || 'google');
+      stmt.run(id, cleanEmail, name || null, picture || null, provider || 'google', Date.now());
       return this.findById(id);
     }
+  }
+};
+
+export const verificationDAO = {
+  createCode({ id, email, otpHash, salt, purpose = 'signup_verification', expiresMinutes = 10, cooldownSeconds = 60 }) {
+    const cleanEmail = email.toLowerCase().trim();
+    const now = Date.now();
+    const expiresAt = now + (expiresMinutes * 60 * 1000);
+    const resendAvailableAt = now + (cooldownSeconds * 1000);
+    const codeId = id || ('code_' + now + '_' + Math.random().toString(36).substring(2, 8));
+
+    // Invalidate prior codes for this email and purpose
+    this.deleteForEmail(cleanEmail, purpose);
+
+    const stmt = db.prepare(`
+      INSERT INTO verification_codes (id, email, otp_hash, salt, purpose, attempts, max_attempts, expires_at, resend_available_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 0, 5, ?, ?, ?)
+    `);
+    stmt.run(codeId, cleanEmail, otpHash, salt, purpose, expiresAt, resendAvailableAt, now);
+
+    return {
+      id: codeId,
+      email: cleanEmail,
+      purpose,
+      expiresAt,
+      resendAvailableAt,
+      attempts: 0,
+      maxAttempts: 5
+    };
+  },
+
+  getLatest(email, purpose = 'signup_verification') {
+    const cleanEmail = email.toLowerCase().trim();
+    const stmt = db.prepare(`
+      SELECT * FROM verification_codes 
+      WHERE email = ? AND purpose = ?
+      ORDER BY created_at DESC LIMIT 1
+    `);
+    const r = stmt.get(cleanEmail, purpose);
+    if (!r) return null;
+    return {
+      id: r.id,
+      email: r.email,
+      otpHash: r.otp_hash,
+      salt: r.salt,
+      purpose: r.purpose,
+      attempts: r.attempts,
+      maxAttempts: r.max_attempts,
+      expiresAt: r.expires_at,
+      resendAvailableAt: r.resend_available_at,
+      createdAt: r.created_at
+    };
+  },
+
+  incrementAttempts(id) {
+    const stmt = db.prepare('UPDATE verification_codes SET attempts = attempts + 1 WHERE id = ?');
+    stmt.run(id);
+    const checkStmt = db.prepare('SELECT attempts, max_attempts FROM verification_codes WHERE id = ?');
+    return checkStmt.get(id);
+  },
+
+  deleteForEmail(email, purpose = 'signup_verification') {
+    const cleanEmail = email.toLowerCase().trim();
+    const stmt = db.prepare('DELETE FROM verification_codes WHERE email = ? AND purpose = ?');
+    stmt.run(cleanEmail, purpose);
+  }
+};
+
+export const signupVerificationDAO = {
+  create({ token, email, expiresMinutes = 15 }) {
+    const cleanEmail = email.toLowerCase().trim();
+    const now = Date.now();
+    const expiresAt = now + expiresMinutes * 60 * 1000;
+
+    // Delete any older unused tokens for this email
+    try {
+      db.prepare('DELETE FROM signup_verifications WHERE email = ? AND used = 0').run(cleanEmail);
+    } catch (e) {}
+
+    const stmt = db.prepare(`
+      INSERT INTO signup_verifications (token, email, expires_at, used, created_at)
+      VALUES (?, ?, ?, 0, ?)
+    `);
+    stmt.run(token, cleanEmail, expiresAt, now);
+    return { token, email: cleanEmail, expiresAt };
+  },
+
+  getValid(token, email) {
+    if (!token || !email) return null;
+    const cleanEmail = email.toLowerCase().trim();
+    const now = Date.now();
+    const stmt = db.prepare(`
+      SELECT * FROM signup_verifications 
+      WHERE token = ? AND email = ? AND used = 0 AND expires_at > ?
+    `);
+    return stmt.get(token, cleanEmail, now);
+  },
+
+  markUsed(token) {
+    const stmt = db.prepare('UPDATE signup_verifications SET used = 1 WHERE token = ?');
+    stmt.run(token);
+  },
+
+  cleanupExpired() {
+    const now = Date.now();
+    try {
+      db.prepare('DELETE FROM signup_verifications WHERE expires_at < ? OR used = 1').run(now);
+    } catch (e) {}
   }
 };
 

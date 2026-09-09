@@ -26,6 +26,91 @@ export function isGmailConfigured() {
 }
 
 /**
+ * Checks if Brevo (Sendinblue) free REST API is configured (100% Free, 300 emails/day, ₹0 cost)
+ */
+export function isBrevoConfigured() {
+  const key = process.env.BREVO_API_KEY;
+  return Boolean(key && key.trim().length > 0 && !key.includes('your_brevo_key'));
+}
+
+/**
+ * Checks if Resend API key is configured
+ */
+export function isResendConfigured() {
+  const key = process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY;
+  return Boolean(key && key.trim().length > 0 && !key.includes('re_your_api_key'));
+}
+
+/**
+ * Checks if ANY live transactional email provider is configured
+ */
+export function isEmailConfigured() {
+  return isGmailConfigured() || isBrevoConfigured() || isResendConfigured();
+}
+
+/**
+ * Sends an email via Brevo REST API (100% Free tier, 300 emails/day, no credit card required)
+ */
+async function sendViaBrevo({ to, subject, html, text }) {
+  const apiKey = process.env.BREVO_API_KEY.trim();
+  const senderEmail = (process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER || to).trim();
+  const senderName = process.env.EMAIL_FROM_NAME || 'Hisabo';
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': apiKey,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      sender: { name: senderName, email: senderEmail },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || `HTTP ${response.status} from Brevo`;
+    throw new Error(errorMsg);
+  }
+  return { id: data.messageId || 'brevo-sent' };
+}
+
+/**
+ * Sends an email via Resend REST API
+ */
+async function sendViaResend({ to, subject, html, text }) {
+  const apiKey = (process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY).trim();
+  const from = process.env.EMAIL_FROM || 'Hisabo <onboarding@resend.dev>';
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      html,
+      text
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || data.error?.message || `HTTP ${response.status} from Resend`;
+    throw new Error(errorMsg);
+  }
+  return { id: data.id };
+}
+
+/**
  * Returns configuration status and masked sender email
  */
 export function getGmailConfigStatus() {
@@ -86,6 +171,58 @@ export function saveGmailCredentialsToEnv(gmailUser, appPassword) {
 }
 
 /**
+ * Persists Resend API key to .env file
+ */
+export function saveResendKeyToEnv(apiKey) {
+  const cleanKey = apiKey.trim();
+  process.env.RESEND_API_KEY = cleanKey;
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+    let keySet = false;
+    const lines = content ? content.split(/\r?\n/) : [];
+    const newLines = lines.map(line => {
+      if (/^\s*#?\s*RESEND_API_KEY\s*=/i.test(line)) {
+        keySet = true;
+        return `RESEND_API_KEY=${cleanKey}`;
+      }
+      return line;
+    });
+    if (!keySet) newLines.push(`RESEND_API_KEY=${cleanKey}`);
+    fs.writeFileSync(envPath, newLines.join('\n'), 'utf8');
+    console.log('[Hisabo Mail] Saved RESEND_API_KEY into .env successfully.');
+  } catch (err) {
+    console.error('[Hisabo Mail] Failed to write RESEND_API_KEY to .env:', err.message);
+  }
+  return { cleanKey };
+}
+
+/**
+ * Enables local development OTP fallback in .env
+ */
+export function enableDevModeInEnv() {
+  process.env.ALLOW_DEV_FALLBACK = 'true';
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+    let set = false;
+    const lines = content ? content.split(/\r?\n/) : [];
+    const newLines = lines.map(line => {
+      if (/^\s*#?\s*ALLOW_DEV_FALLBACK\s*=/i.test(line)) {
+        set = true;
+        return 'ALLOW_DEV_FALLBACK=true';
+      }
+      return line;
+    });
+    if (!set) newLines.push('ALLOW_DEV_FALLBACK=true');
+    fs.writeFileSync(envPath, newLines.join('\n'), 'utf8');
+    console.log('[Hisabo Mail] Enabled ALLOW_DEV_FALLBACK=true in .env.');
+  } catch (err) {
+    console.error('[Hisabo Mail] Failed to write ALLOW_DEV_FALLBACK to .env:', err.message);
+  }
+}
+
+/**
  * Tests connection with Google SMTP and saves credentials if verified
  */
 export async function verifyAndSaveGmailCredentials(gmailUser, appPassword) {
@@ -104,11 +241,16 @@ export async function verifyAndSaveGmailCredentials(gmailUser, appPassword) {
 
   // Test transporter connection
   const testTransporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: cleanUser,
       pass: cleanPass
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
 
   try {
@@ -136,11 +278,16 @@ function createTransporter() {
   }
 
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: process.env.GMAIL_USER.trim(),
       pass: process.env.GMAIL_APP_PASSWORD.trim().replace(/\s+/g, '')
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
 }
 
@@ -471,4 +618,161 @@ export async function checkAndTriggerBudgetAlerts(userId, monthKey, userEmail, u
     percent: Math.round(percent * 10) / 10,
     alertsTriggered
   };
+}
+
+/**
+ * Generates responsive HTML email for Gmail OTP verification
+ */
+function generateOtpEmailHtml({ userName, otpCode, expiresMinutes = 10 }) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify your Gmail - Hisabo</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #0f172a; color: #f8fafc; }
+    .container { max-width: 540px; margin: 30px auto; background: #1e293b; border-radius: 16px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+    .header { background: linear-gradient(135deg, #10b981 0%, #0284c7 100%); padding: 32px 24px; text-align: center; }
+    .brand { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff; margin: 0 0 6px 0; }
+    .tagline { font-size: 13px; color: #e0e7ff; margin: 0; opacity: 0.9; }
+    .body { padding: 32px 28px; text-align: center; }
+    .badge { display: inline-block; padding: 6px 14px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; border-radius: 9999px; background-color: #d1fae5; color: #065f46; margin-bottom: 16px; text-transform: uppercase; }
+    .title { font-size: 22px; font-weight: 700; color: #f8fafc; margin: 0 0 10px 0; }
+    .desc { font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 28px 0; }
+    .otp-card { background: #0f172a; border-radius: 14px; padding: 24px; border: 1px solid #334155; margin: 0 auto 28px auto; display: inline-block; min-width: 240px; }
+    .otp-code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 38px; font-weight: 800; letter-spacing: 12px; color: #10b981; margin: 0; padding-left: 12px; }
+    .expiry-note { font-size: 13px; color: #f59e0b; margin-top: 10px; font-weight: 600; display: block; }
+    .security-notice { font-size: 13px; color: #94a3b8; line-height: 1.6; border-top: 1px solid #334155; padding-top: 20px; margin-top: 10px; text-align: left; }
+    .security-notice strong { color: #f87171; }
+    .footer { background: #0f172a; padding: 20px 28px; text-align: center; border-top: 1px solid #334155; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">💰 Hisabo</div>
+      <div class="tagline">Smart Expense Tracker & Budget Manager</div>
+    </div>
+    <div class="body">
+      <div class="badge">SECURITY VERIFICATION</div>
+      <h2 class="title">Verify your Gmail</h2>
+      <p class="desc">
+        Hi <strong>${userName || 'there'}</strong>,<br>
+        Thank you for joining Hisabo. Please enter the 6-digit verification code below to confirm that this Gmail belongs to you and complete your registration.
+      </p>
+
+      <div class="otp-card">
+        <div class="otp-code">${otpCode}</div>
+        <span class="expiry-note">⏳ Expires in ${expiresMinutes} minutes</span>
+      </div>
+
+      <div class="security-notice">
+        <strong>⚠️ Security Warning:</strong> Do not share this verification code with anyone. Hisabo will never ask you for this code. If you did not initiate this registration request, please disregard this email.
+      </div>
+    </div>
+    <div class="footer">
+      Sent automatically by <strong>Hisabo Security</strong> &bull; Protected by Strict Gmail Verification
+    </div>
+  </div>
+</body>
+</html>
+`;
+}
+
+/**
+ * Sends a 6-digit OTP verification email to the user's Gmail.
+ * Enforces REAL email delivery via Google Gmail SMTP, Brevo REST API, or Resend.
+ * Throws an explicit error if no provider is configured or if delivery fails.
+ * NEVER simulates, mocks, or exposes OTPs.
+ */
+export async function sendVerificationOtpEmail({ toEmail, userName = '', otpCode, expiresMinutes = 10 }) {
+  if (!toEmail || !otpCode) {
+    throw new Error('Recipient email and OTP code are required.');
+  }
+
+  const subject = 'Verify your Gmail';
+  const htmlContent = generateOtpEmailHtml({ userName, otpCode, expiresMinutes });
+  const textFallback = `Hisabo - Verify your Gmail\n\nYour 6-digit verification code is: ${otpCode}\n\nThis verification code will expire in ${expiresMinutes} minutes.\n\nSecurity Notice: Do NOT share this verification code with anyone. Hisabo staff will never ask for your code.\n\nIf you did not request this verification, please safely ignore this email.`;
+
+  // 1. Google Gmail SMTP via Nodemailer (₹0, 500 emails/day, direct inbox delivery)
+  if (isGmailConfigured()) {
+    try {
+      const transporter = createTransporter();
+      const sender = process.env.GMAIL_USER.trim();
+      const info = await transporter.sendMail({
+        from: `"Hisabo" <${sender}>`,
+        to: toEmail,
+        subject,
+        text: textFallback,
+        html: htmlContent
+      });
+
+      console.log(`[Hisabo Mail] ✅ Sent verification OTP to ${toEmail} via Gmail SMTP (Message ID: ${info.messageId})`);
+      return {
+        success: true,
+        provider: 'smtp',
+        messageId: info.messageId,
+        toEmail
+      };
+    } catch (err) {
+      console.error(`[Hisabo Mail] ❌ Gmail SMTP delivery failed for ${toEmail}:`, err.message);
+      // If Brevo or Resend is also configured, fall through; otherwise throw explicit error
+      if (!isBrevoConfigured() && !isResendConfigured()) {
+        throw new Error(`Failed to deliver verification email via Gmail SMTP: ${err.message}`);
+      }
+    }
+  }
+
+  // 2. Brevo (Sendinblue) Free REST API (₹0, 300 emails/day, no credit card required)
+  if (isBrevoConfigured()) {
+    try {
+      const brevoRes = await sendViaBrevo({
+        to: toEmail,
+        subject,
+        html: htmlContent,
+        text: textFallback
+      });
+      console.log(`[Hisabo Mail] ✅ Sent verification OTP to ${toEmail} via Brevo API (ID: ${brevoRes.id})`);
+      return {
+        success: true,
+        provider: 'brevo',
+        id: brevoRes.id,
+        toEmail
+      };
+    } catch (err) {
+      console.error(`[Hisabo Mail] ❌ Brevo delivery failed for ${toEmail}:`, err.message);
+      if (!isResendConfigured()) {
+        throw new Error(`Failed to deliver verification email via Brevo: ${err.message}`);
+      }
+    }
+  }
+
+  // 3. Resend REST API (if user configured a custom domain or Resend API key)
+  if (isResendConfigured()) {
+    try {
+      const resendRes = await sendViaResend({
+        to: toEmail,
+        subject,
+        html: htmlContent,
+        text: textFallback
+      });
+      console.log(`[Hisabo Mail] ✅ Sent verification OTP to ${toEmail} via Resend (ID: ${resendRes.id})`);
+      return {
+        success: true,
+        provider: 'resend',
+        id: resendRes.id,
+        toEmail
+      };
+    } catch (err) {
+      console.error(`[Hisabo Mail] ❌ Resend delivery failed for ${toEmail}:`, err.message);
+      throw new Error(`Failed to deliver verification email via Resend: ${err.message}`);
+    }
+  }
+
+  // 4. Strict: Throw explicit error if no live delivery service is configured.
+  // NEVER pretend an email was sent, and NEVER return mock codes.
+  console.error(`[Hisabo Mail] ❌ Cannot send OTP to ${toEmail}: No live email provider configured.`);
+  throw new Error('Email delivery service not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD (16-character Google App Password) or BREVO_API_KEY in your environment variables to enable real OTP delivery.');
 }

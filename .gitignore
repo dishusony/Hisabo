@@ -54,11 +54,7 @@ desktop.ini
 *.sln
 
 # Test scratch & local helpers
-test_runner.js
-test_security.js
-test_auth_integration.js
-test_refresh_persistence.js
-test_backend_api.js
+test_*.js
 push_to_github.bat
 setup_git.ps1
 

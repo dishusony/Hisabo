@@ -86,6 +86,56 @@ export function getPaymentBadge(paymentId) {
   </span>`;
 }
 
+export function animateValue(el, targetVal, options = {}) {
+  if (!el) return;
+  const numTarget = Number(targetVal) || 0;
+  const {
+    duration = 550,
+    formatter = (v) => v.toString(),
+    prefix = '',
+    suffix = ''
+  } = options;
+
+  // Check prefers-reduced-motion
+  if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = `${prefix}${formatter(numTarget)}${suffix}`;
+    el._currentVal = numTarget;
+    return;
+  }
+
+  const startVal = typeof el._currentVal === 'number' ? el._currentVal : 0;
+  if (startVal === numTarget && el.textContent.trim() !== '') {
+    return;
+  }
+
+  if (el._animFrame) {
+    cancelAnimationFrame(el._animFrame);
+  }
+
+  const startTime = performance.now();
+  const diff = numTarget - startVal;
+
+  function step(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Smooth cubic ease-out
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const current = startVal + diff * ease;
+
+    el.textContent = `${prefix}${formatter(current)}${suffix}`;
+
+    if (progress < 1) {
+      el._animFrame = requestAnimationFrame(step);
+    } else {
+      el.textContent = `${prefix}${formatter(numTarget)}${suffix}`;
+      el._currentVal = numTarget;
+      el._animFrame = null;
+    }
+  }
+
+  el._animFrame = requestAnimationFrame(step);
+}
+
 export function showToast(message, type = 'success') {
   const container = document.getElementById('toastContainer');
   if (!container) return;
@@ -98,6 +148,7 @@ export function showToast(message, type = 'success') {
     <div class="toast-icon">${iconSvg}</div>
     <div class="toast-message">${message}</div>
     <button class="toast-close" aria-label="Close">&times;</button>
+    <div class="toast-progress-bar"></div>
   `;
 
   container.appendChild(toast);
@@ -129,28 +180,33 @@ export function updateDashboardKPIs(kpis) {
   const progressTextEl = document.getElementById('kpiProgressText');
   const alertBannerEl = document.getElementById('budgetAlertBanner');
 
-  if (totalSpentEl) totalSpentEl.textContent = formatCurrency(kpis.totalSpent);
-  if (budgetEl) budgetEl.textContent = formatCurrency(kpis.budget);
+  if (totalSpentEl) animateValue(totalSpentEl, kpis.totalSpent, { formatter: formatCurrency });
+  if (budgetEl) animateValue(budgetEl, kpis.budget, { formatter: formatCurrency });
   
   if (remainingEl) {
-    if (kpis.remaining < 0) {
-      remainingEl.textContent = `- ${formatCurrency(Math.abs(kpis.remaining))}`;
-      remainingEl.className = 'kpi-value text-danger';
-    } else {
-      remainingEl.textContent = formatCurrency(kpis.remaining);
-      remainingEl.className = 'kpi-value text-success';
-    }
+    const isNegative = kpis.remaining < 0;
+    remainingEl.className = isNegative ? 'summary-remaining-val text-danger' : 'summary-remaining-val text-success';
+    animateValue(remainingEl, Math.abs(kpis.remaining), {
+      formatter: formatCurrency,
+      prefix: isNegative ? '- ' : ''
+    });
   }
 
   if (remainingLabelEl) {
     remainingLabelEl.textContent = kpis.remaining < 0 ? 'Over Budget' : 'Remaining Budget';
   }
 
-  if (txCountEl) txCountEl.textContent = kpis.transactionCount;
-  if (avgExpenseEl) avgExpenseEl.textContent = formatCurrency(kpis.averageExpense);
+  if (txCountEl) {
+    animateValue(txCountEl, kpis.transactionCount, {
+      formatter: (v) => Math.round(v).toString()
+    });
+  }
+  if (avgExpenseEl) {
+    animateValue(avgExpenseEl, kpis.averageExpense, { formatter: formatCurrency });
+  }
   
   if (highestExpenseEl) {
-    highestExpenseEl.textContent = formatCurrency(kpis.highestExpense.amount);
+    animateValue(highestExpenseEl, kpis.highestExpense.amount, { formatter: formatCurrency });
   }
   if (highestItemEl) {
     highestItemEl.textContent = kpis.highestExpense.amount > 0 ? `(${kpis.highestExpense.item})` : '';
@@ -258,11 +314,14 @@ export function renderExpenseTable(expenses, onEdit, onDuplicate, onDelete) {
     tableSummary.textContent = `Showing ${expenses.length} transaction${expenses.length === 1 ? '' : 's'} (Total: ${formatCurrency(totalFiltered)})`;
   }
 
-  expenses.forEach(exp => {
+  expenses.forEach((exp, index) => {
+    const animDelay = Math.min(index * 25, 360);
+
     // 1. Table Row (Desktop)
     const tr = document.createElement('tr');
     tr.className = 'expense-row';
     tr.dataset.id = exp.id;
+    tr.style.animationDelay = `${animDelay}ms`;
 
     tr.innerHTML = `
       <td class="col-date">${formatDate(exp.date)}</td>
@@ -292,6 +351,7 @@ export function renderExpenseTable(expenses, onEdit, onDuplicate, onDelete) {
     const card = document.createElement('div');
     card.className = 'expense-card';
     card.dataset.id = exp.id;
+    card.style.animationDelay = `${animDelay}ms`;
     card.innerHTML = `
       <div class="card-header-row">
         <div>
@@ -316,6 +376,59 @@ export function renderExpenseTable(expenses, onEdit, onDuplicate, onDelete) {
     card.querySelector('.btn-dup-card').addEventListener('click', () => onDuplicate(exp.id));
     card.querySelector('.btn-del-card').addEventListener('click', () => onDelete(exp.id));
     cardList.appendChild(card);
+  });
+}
+
+export function highlightNewRow(id) {
+  if (!id) return;
+  requestAnimationFrame(() => {
+    const els = document.querySelectorAll(`[data-id="${id}"]`);
+    els.forEach(el => {
+      el.classList.remove('row-highlight-new');
+      void el.offsetWidth; // Force reflow
+      el.classList.add('row-highlight-new');
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (err) {
+        // Safe fallback
+      }
+    });
+  });
+}
+
+export function animateRowDeletion(id, callback) {
+  const els = document.querySelectorAll(`[data-id="${id}"]`);
+  if (!els || els.length === 0) {
+    if (callback) callback();
+    return;
+  }
+
+  els.forEach(el => el.classList.add('row-deleting'));
+
+  setTimeout(() => {
+    if (callback) callback();
+  }, 260);
+}
+
+export function initRipples() {
+  if (typeof document === 'undefined') return;
+  document.addEventListener('pointerdown', (e) => {
+    const target = e.target.closest('.btn-primary, .btn-secondary, .chip-btn, .view-tab, .theme-card, .select-pill, .fab-add-btn, .btn-icon');
+    if (!target) return;
+
+    const rect = target.getBoundingClientRect();
+    const ripple = document.createElement('span');
+    ripple.className = 'ripple-effect';
+    const size = Math.max(rect.width, rect.height) * 2.2;
+    ripple.style.width = `${size}px`;
+    ripple.style.height = `${size}px`;
+    ripple.style.left = `${e.clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${e.clientY - rect.top - size / 2}px`;
+
+    target.appendChild(ripple);
+    setTimeout(() => {
+      if (ripple.parentNode) ripple.remove();
+    }, 600);
   });
 }
 
