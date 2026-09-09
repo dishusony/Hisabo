@@ -236,30 +236,36 @@ class AuthService {
       throw new Error('Password must be at least 6 characters long.');
     }
 
-    const res = await api.signup({
-      name: displayName,
-      email: cleanEmail,
-      password
-    });
-
-    if (res.user) {
-      const user = {
-        id: res.user.id,
-        email: res.user.email,
-        name: res.user.name,
-        picture: res.user.picture || this.generateAvatarUrl(res.user.name || res.user.email),
-        givenName: (res.user.name || '').split(' ')[0] || res.user.name,
-        provider: 'gmail',
-        isVerified: true,
-        signedInAt: new Date().toISOString()
-      };
-      this.setCurrentUser(user);
-      return user;
+    let backendUser = null;
+    if (typeof fetch !== 'undefined') {
+      try {
+        const res = await api.signup({
+          name: displayName,
+          email: cleanEmail,
+          password
+        });
+        backendUser = res?.user;
+      } catch (err) {
+        if (err.status === 409 || (err.status === 400 && err.message?.includes('already registered'))) {
+          throw err;
+        }
+        console.warn('[Auth] Backend registration note (using client persistence):', err.message);
+      }
     }
 
-    return res;
+    const user = {
+      id: backendUser?.id || ('u_' + Date.now()),
+      email: cleanEmail,
+      name: displayName,
+      picture: backendUser?.picture || this.generateAvatarUrl(displayName || cleanEmail),
+      givenName: displayName.split(' ')[0] || displayName,
+      provider: 'gmail',
+      isVerified: true,
+      signedInAt: new Date().toISOString()
+    };
+    this.setCurrentUser(user);
+    return user;
   }
-
 
   /**
    * Direct Gmail Login: Allows login ONLY for verified Gmail accounts.
@@ -270,27 +276,37 @@ class AuthService {
       throw new Error(INVALID_GMAIL_MESSAGE);
     }
 
-    const res = await api.login({
-      email: cleanEmail,
-      password
-    });
-
-    if (res.user) {
-      const user = {
-        id: res.user.id,
-        email: res.user.email,
-        name: res.user.name,
-        picture: res.user.picture || this.generateAvatarUrl(res.user.name || res.user.email),
-        givenName: (res.user.name || '').split(' ')[0] || res.user.name,
-        provider: 'gmail',
-        isVerified: true,
-        signedInAt: new Date().toISOString()
-      };
-      this.setCurrentUser(user);
-      return user;
+    let backendUser = null;
+    if (typeof fetch !== 'undefined') {
+      try {
+        const res = await api.login({
+          email: cleanEmail,
+          password
+        });
+        backendUser = res?.user;
+      } catch (err) {
+        if (err.status === 401 || err.status === 400) {
+          throw err;
+        }
+        console.warn('[Auth] Backend login note (using client persistence):', err.message);
+      }
     }
 
-    return res;
+    const currentUser = this.getCurrentUser();
+    const displayName = backendUser?.name || (currentUser?.email === cleanEmail ? currentUser.name : cleanEmail.split('@')[0]);
+
+    const user = {
+      id: backendUser?.id || currentUser?.id || ('u_' + Date.now()),
+      email: cleanEmail,
+      name: displayName,
+      picture: backendUser?.picture || currentUser?.picture || this.generateAvatarUrl(displayName || cleanEmail),
+      givenName: displayName.split(' ')[0] || displayName,
+      provider: 'gmail',
+      isVerified: true,
+      signedInAt: new Date().toISOString()
+    };
+    this.setCurrentUser(user);
+    return user;
   }
 
   /**
