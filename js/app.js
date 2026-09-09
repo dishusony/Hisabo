@@ -8,6 +8,7 @@ import { refreshAllCharts, initCharts } from './charts.js';
 import { exportExpensesToCSV, parseCSV } from './csv.js';
 import { authService } from './auth.js';
 import { api } from './api.js';
+import { cloudSync } from './firebase-sync.js';
 import { fireConfetti } from './confetti.js';
 import {
   updateDashboardKPIs,
@@ -42,6 +43,11 @@ class AppController {
     this.initDOM();
     this.initAuth();
     this.initEventListeners();
+    cloudSync.onStatusChange((status) => this.updateCloudSyncUI(status));
+    window.addEventListener('hisabo:cloud-sync', () => {
+      this.render();
+      this.updateCloudSyncUI(cloudSync.getStatus());
+    });
     this.render();
     setTimeout(() => this.checkMailStatus(), 400);
   }
@@ -210,6 +216,7 @@ class AppController {
     authService.onAuthStateChanged(async (user) => {
       store.setCurrentUser(user);
       updateAuthUI(user, store);
+      this.updateCloudSyncUI(cloudSync.getStatus());
       if (user) {
         closeModal('authModal');
         await store.syncWithBackend();
@@ -854,6 +861,124 @@ class AppController {
       }
     });
 
+    // ========================================================================
+    // Multi-Browser Cloud Sync Event Listeners
+    // ========================================================================
+    const openCloudSyncModal = () => {
+      const textarea = document.getElementById('firebaseConfigInput');
+      if (textarea && cloudSync.config) {
+        textarea.value = JSON.stringify(cloudSync.config, null, 2);
+      }
+      this.updateCloudSyncUI(cloudSync.getStatus());
+      openModal('cloudSyncModal');
+    };
+
+    document.getElementById('cloudSyncHeaderBtn')?.addEventListener('click', openCloudSyncModal);
+    document.getElementById('toolsConfigureCloudBtn')?.addEventListener('click', openCloudSyncModal);
+
+    // Save & Connect Cloud Sync Form
+    document.getElementById('cloudSyncConfigForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const textarea = document.getElementById('firebaseConfigInput');
+      const submitBtn = document.getElementById('saveCloudSyncBtn');
+      const alertBox = document.getElementById('cloudSyncStatusAlert');
+      const origText = submitBtn ? submitBtn.innerHTML : '';
+
+      try {
+        const raw = (textarea?.value || '').trim();
+        if (!raw) {
+          throw new Error('Please paste your Firebase configuration before saving.');
+        }
+
+        const parsed = this.parseFirebaseConfig(raw);
+        if (!parsed || !parsed.apiKey || !parsed.projectId) {
+          throw new Error('Configuration must contain at least "apiKey" and "projectId".');
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = 'Connecting to Firebase...';
+        }
+
+        const ok = await cloudSync.init(parsed);
+        if (!ok) {
+          throw new Error(cloudSync.lastError || 'Failed to connect to Firebase. Please check your configuration.');
+        }
+
+        const user = authService.getCurrentUser();
+        if (user && user.email) {
+          store.attachCloudSync(user.email);
+        }
+
+        showToast('🎉 Connected to Firebase Cloud Sync! Multi-browser sync is now active.');
+        fireConfetti({ particleCount: 50, spread: 60 });
+        closeModal('cloudSyncModal');
+        this.render();
+      } catch (err) {
+        showToast(err.message, 'error');
+        if (alertBox) {
+          alertBox.className = 'auth-alert-box alert-error';
+          alertBox.style.display = 'block';
+          alertBox.textContent = `❌ ${err.message}`;
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = origText;
+        }
+      }
+    });
+
+    // Disconnect Cloud Sync
+    document.getElementById('disconnectCloudSyncBtn')?.addEventListener('click', () => {
+      cloudSync.saveConfig(null);
+      cloudSync.disconnect();
+      const textarea = document.getElementById('firebaseConfigInput');
+      if (textarea) textarea.value = '';
+      showToast('Cloud Sync disconnected. Reverting to local storage.');
+      this.updateCloudSyncUI(cloudSync.getStatus());
+    });
+
+    // One-Click Upload Local to Cloud
+    document.getElementById('toolsUploadLocalBtn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const user = authService.getCurrentUser();
+      if (!user || !user.email) {
+        showToast('Please log in with your Gmail first to sync data.', 'warning');
+        openModal('authModal');
+        return;
+      }
+
+      if (!cloudSync.isConfigured()) {
+        showToast('Please configure Firebase Cloud Sync first.', 'info');
+        openCloudSyncModal();
+        return;
+      }
+
+      const origText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = 'Uploading...';
+      }
+
+      try {
+        const res = await cloudSync.syncLocalToCloud(user.email, store.expenses, store.budgets);
+        if (res.success) {
+          showToast(`☁️ Successfully synced ${res.count} records to your cloud database!`);
+          fireConfetti({ particleCount: 40, spread: 50 });
+        } else {
+          showToast(`Upload failed: ${res.error || 'Unknown error'}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Upload failed: ${err.message}`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origText;
+        }
+      }
+    });
+
     // Global keyboard shortcuts (esc will not close unauthenticated gate)
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -868,6 +993,105 @@ class AppController {
         }
       }
     });
+  }
+
+  parseFirebaseConfig(raw) {
+    if (!raw || !raw.trim()) return null;
+    let text = raw.trim();
+    // Strip variable assignment if present (e.g. const firebaseConfig = { ... };)
+    text = text.replace(/^(?:const|let|var)\s+\w+\s*=\s*/, '');
+    // Strip trailing semicolon
+    text = text.replace(/;\s*$/, '');
+    
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      try {
+        // Convert JS object literals (unquoted keys, single quotes) into valid JSON
+        const jsonFormatted = text
+          .replace(/([{,]\s*)([a-zA-Z0-9_$]+)\s*:/g, '$1"$2":')
+          .replace(/'/g, '"')
+          .replace(/,\s*([}\]])/g, '$1');
+        return JSON.parse(jsonFormatted);
+      } catch (e2) {
+        throw new Error('Invalid Firebase configuration format. Please paste valid JSON or JS object.');
+      }
+    }
+  }
+
+  updateCloudSyncUI(syncState) {
+    const status = syncState?.status || 'disconnected';
+    const isConfigured = Boolean(syncState?.isConfigured);
+    const projectId = syncState?.projectId;
+    const currentUser = authService.getCurrentUser();
+
+    // Header Dot & Label
+    const dot = document.getElementById('cloudSyncHeaderDot');
+    const label = document.getElementById('cloudSyncHeaderLabel');
+    if (dot) {
+      dot.className = 'sync-status-dot';
+      if (status === 'connected') dot.classList.add('connected');
+      else if (status === 'connecting') dot.classList.add('connecting');
+      else if (status === 'error') dot.classList.add('error');
+    }
+    if (label) {
+      if (status === 'connected') {
+        label.textContent = 'Cloud Sync: Active';
+      } else if (status === 'connecting') {
+        label.textContent = 'Syncing...';
+      } else if (status === 'error') {
+        label.textContent = 'Sync Error';
+      } else {
+        label.textContent = isConfigured ? 'Disconnected' : 'Cloud Sync';
+      }
+    }
+
+    // Tools Tab Card
+    const toolsTag = document.getElementById('toolsCloudSyncStatusTag');
+    const toolsUser = document.getElementById('toolsCloudSyncUserDisplay');
+    if (toolsTag) {
+      if (status === 'connected') {
+        toolsTag.textContent = 'Live Cloud Synced';
+        toolsTag.style.background = 'rgba(16, 185, 129, 0.16)';
+        toolsTag.style.color = '#34d399';
+      } else if (status === 'connecting') {
+        toolsTag.textContent = 'Connecting...';
+        toolsTag.style.background = 'rgba(245, 158, 11, 0.16)';
+        toolsTag.style.color = '#fbbf24';
+      } else if (status === 'error') {
+        toolsTag.textContent = 'Sync Error';
+        toolsTag.style.background = 'rgba(239, 68, 68, 0.16)';
+        toolsTag.style.color = '#f87171';
+      } else {
+        toolsTag.textContent = isConfigured ? 'Ready (Sign in to sync)' : 'Local Only';
+        toolsTag.style.background = 'rgba(255, 255, 255, 0.08)';
+        toolsTag.style.color = 'var(--text-secondary)';
+      }
+    }
+    if (toolsUser) {
+      toolsUser.textContent = currentUser?.email || 'Not signed in';
+    }
+
+    // Modal Status Alert
+    const modalAlert = document.getElementById('cloudSyncStatusAlert');
+    if (modalAlert) {
+      if (status === 'connected') {
+        modalAlert.className = 'auth-alert-box alert-success';
+        modalAlert.style.display = 'block';
+        modalAlert.textContent = `✅ Live Cloud Sync is active on project "${projectId || 'hisabo'}" for ${currentUser?.email || 'this device'}.`;
+      } else if (status === 'error') {
+        modalAlert.className = 'auth-alert-box alert-error';
+        modalAlert.style.display = 'block';
+        modalAlert.textContent = `❌ Sync error: ${syncState?.lastError || 'Could not connect to Firebase'}`;
+      } else if (isConfigured) {
+        modalAlert.className = 'auth-alert-box alert-info';
+        modalAlert.style.display = 'block';
+        modalAlert.textContent = `ℹ️ Firebase configured for project "${projectId}". Log in to sync expenses.`;
+      } else {
+        modalAlert.style.display = 'none';
+        modalAlert.textContent = '';
+      }
+    }
   }
 
   switchTab(tabName) {
@@ -894,6 +1118,9 @@ class AppController {
     // Refresh charts if switching to Analytics tab
     if (tabName === 'analytics') {
       setTimeout(() => refreshAllCharts(store), 50);
+    }
+    if (tabName === 'tools') {
+      this.updateCloudSyncUI(cloudSync.getStatus());
     }
   }
 

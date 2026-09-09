@@ -67,6 +67,12 @@
           <span class="btn-text" id="themeBtnLabel">Theme</span>
         </button>
 
+        <!-- Real-Time Cloud Sync Button -->
+        <button id="cloudSyncHeaderBtn" class="btn-secondary btn-sm cloud-sync-pill-btn" title="Multi-Browser Cloud Sync Status" aria-label="Cloud Sync">
+          <span class="sync-status-dot" id="cloudSyncHeaderDot"></span>
+          <span class="btn-text" id="cloudSyncHeaderLabel">Cloud Sync</span>
+        </button>
+
         <!-- Google / Gmail Auth Button (Guest State) -->
         <button id="googleSignInBtn" class="btn-google-auth btn-sm" title="Sign in with Gmail / Google">
           <svg class="google-icon" width="16" height="16" viewBox="0 0 24 24">
@@ -444,6 +450,33 @@
           <button id="toolsAccountBtn" class="btn-secondary" style="width: 100%; justify-content: center;">
             Sign in with Gmail
           </button>
+        </div>
+
+        <!-- Multi-Device Real-Time Cloud Sync Card -->
+        <div class="tool-card cloud-sync-card">
+          <div class="tool-card-icon" style="color: #ffca28; background: rgba(255, 202, 40, 0.14);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+          </div>
+          <h3 class="tool-card-title">Multi-Browser Cloud Sync</h3>
+          <p class="tool-card-desc">Sync your expenses and budgets live across Chrome, Edge, Brave, laptops, and phones via Google Firebase Firestore (₹0 Free).</p>
+          <div class="tools-alert-meta" style="margin-bottom: 0.85rem;">
+            <div class="alert-recipient-row">
+              <span class="recipient-label">Sync Status:</span>
+              <span class="meta-status-tag" id="toolsCloudSyncStatusTag">Local Only</span>
+            </div>
+            <div class="alert-recipient-row">
+              <span class="recipient-label">Active Account:</span>
+              <span class="meta-email" id="toolsCloudSyncUserDisplay">Not signed in</span>
+            </div>
+          </div>
+          <div class="tools-mail-actions-row">
+            <button type="button" id="toolsConfigureCloudBtn" class="btn-primary" style="flex: 1; justify-content: center; font-size: 0.82rem;">
+              Configure Cloud Sync
+            </button>
+            <button type="button" id="toolsUploadLocalBtn" class="btn-secondary" style="flex: 1; justify-content: center; font-size: 0.82rem;">
+              Upload Local to Cloud
+            </button>
+          </div>
         </div>
 
         <!-- Gmail Budget Milestone Alerts Card (50%, 90%, 100%) -->
@@ -969,6 +1002,65 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-primary" data-close-modal="themeModal" style="width: 100%; justify-content: center;">Apply & Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Browser Real-Time Cloud Sync Modal (Firebase Firestore) -->
+  <div class="modal-backdrop" id="cloudSyncModal">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-header-brand">
+          <div class="auth-brand-badge" style="background: rgba(255, 202, 40, 0.14); color: #ffca28;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Multi-Device Cloud Sync</h3>
+            <p class="modal-subtitle">Sync records live between multiple browsers and devices (100% Free)</p>
+          </div>
+        </div>
+        <button class="modal-close" id="closeCloudSyncModalBtn" data-close-modal="cloudSyncModal" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 0.8rem;">
+        <div id="cloudSyncStatusAlert" class="auth-alert-box alert-success" style="display: none; margin-bottom: 1rem;"></div>
+
+        <div class="cloud-guide-box" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem; margin-bottom: 1.1rem; font-size: 0.84rem; line-height: 1.5;">
+          <div style="font-weight: 600; margin-bottom: 0.4rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;">
+            <span>⚡ How to get your FREE Google Firebase credentials:</span>
+          </div>
+          <ol style="padding-left: 1.2rem; margin: 0; color: var(--text-secondary);">
+            <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noopener" style="color: var(--primary); text-decoration: underline;">console.firebase.google.com</a> &amp; click <strong>Create a project</strong> (100% Free, no card required).</li>
+            <li>In the left sidebar, click <strong>Build &rarr; Firestore Database</strong> &rarr; <strong>Create database</strong> (choose "Start in test mode").</li>
+            <li>Go to <strong>Project settings (⚙️)</strong> &rarr; scroll down to <strong>Your apps</strong> &rarr; click <strong>Web (&lt;/&gt;)</strong> &rarr; copy the <code>firebaseConfig</code> and paste it below!</li>
+          </ol>
+        </div>
+
+        <form id="cloudSyncConfigForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="firebaseConfigInput">
+              Paste Firebase Configuration (JSON or JS snippet) *
+            </label>
+            <textarea id="firebaseConfigInput" class="form-control" rows="6" placeholder='const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "hisabo-app.firebaseapp.com",
+  projectId: "hisabo-app",
+  storageBucket: "hisabo-app.appspot.com",
+  messagingSenderId: "...",
+  appId: "..."
+};' style="font-family: monospace; font-size: 0.82rem;"></textarea>
+            <span class="input-subhint">Stored securely in your browser's private local storage.</span>
+          </div>
+
+          <div style="display: flex; gap: 0.6rem; margin-top: 1rem;">
+            <button type="submit" id="saveCloudSyncBtn" class="btn-primary" style="flex: 1; justify-content: center; padding: 0.75rem;">
+              Save &amp; Connect Cloud Sync
+            </button>
+            <button type="button" id="disconnectCloudSyncBtn" class="btn-secondary" style="justify-content: center; padding: 0.75rem;">
+              Disconnect
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

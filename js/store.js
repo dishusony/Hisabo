@@ -4,6 +4,7 @@
  */
 
 import { api } from './api.js';
+import { cloudSync } from './firebase-sync.js';
 
 const STORAGE_KEYS = {
   EXPENSES: 'hisabo_expenses_v1',
@@ -147,6 +148,9 @@ class ExpenseStore {
           }
         }).catch(() => {});
       }
+      if (this.currentUser?.email) {
+        cloudSync.saveBudgets(this.currentUser.email, this.budgets).catch(() => {});
+      }
       return true;
     }
     return false;
@@ -205,6 +209,12 @@ class ExpenseStore {
       }).catch(() => {});
     }
 
+    // Real-time Firebase Firestore cloud sync
+    const activeEmail = newExpense.userEmail || (this.currentUser ? this.currentUser.email : null);
+    if (activeEmail) {
+      cloudSync.saveExpense(activeEmail, newExpense).catch(() => {});
+    }
+
     return newExpense;
   }
 
@@ -243,6 +253,12 @@ class ExpenseStore {
       }).catch(() => {});
     }
 
+    // Real-time Firebase Firestore cloud sync
+    const activeEmail = this.expenses[index].userEmail || (this.currentUser ? this.currentUser.email : null);
+    if (activeEmail) {
+      cloudSync.saveExpense(activeEmail, this.expenses[index]).catch(() => {});
+    }
+
     return this.expenses[index];
   }
 
@@ -254,6 +270,9 @@ class ExpenseStore {
       this.saveExpenses();
       if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
         api.deleteExpense(id).catch(() => {});
+      }
+      if (this.currentUser?.email) {
+        cloudSync.deleteExpense(this.currentUser.email, id).catch(() => {});
       }
     }
     return removed;
@@ -470,6 +489,42 @@ class ExpenseStore {
 
   setCurrentUser(user) {
     this.currentUser = user || null;
+    if (user && user.email) {
+      this.attachCloudSync(user.email);
+    } else {
+      cloudSync.disconnect();
+    }
+  }
+
+  attachCloudSync(email) {
+    if (!email || typeof window === 'undefined') return;
+
+    // Real-time Firestore expenses listener across all open browsers
+    cloudSync.subscribeExpenses(email, (cloudExpenses) => {
+      if (Array.isArray(cloudExpenses)) {
+        if (cloudExpenses.length > 0 || this.expenses.length === 0) {
+          this.expenses = cloudExpenses;
+          this.saveExpenses();
+        } else if (this.expenses.length > 0 && cloudExpenses.length === 0) {
+          // Upload local records to populate new cloud account
+          cloudSync.syncLocalToCloud(email, this.expenses, this.budgets).catch(() => {});
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hisabo:cloud-sync', { detail: { type: 'expenses', count: this.expenses.length } }));
+        }
+      }
+    });
+
+    // Real-time Firestore budgets listener
+    cloudSync.subscribeBudgets(email, (cloudBudgets) => {
+      if (cloudBudgets && typeof cloudBudgets === 'object' && Object.keys(cloudBudgets).length > 0) {
+        this.budgets = { ...this.budgets, ...cloudBudgets };
+        this.saveBudgets();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hisabo:cloud-sync', { detail: { type: 'budgets' } }));
+        }
+      }
+    });
   }
 
   getCurrentUser() {

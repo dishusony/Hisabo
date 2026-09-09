@@ -3244,3 +3244,51 @@ h1, h2, h3, h4, h5, h6 {
   border-color: #10b981 !important;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
 }
+
+/* Real-Time Cloud Sync UI */
+.cloud-sync-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.sync-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #64748b;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.sync-status-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulseDot 2s infinite;
+}
+
+.sync-status-dot.connecting {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.sync-status-dot.error {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.75; }
+}
+
+.cloud-sync-card {
+  border-color: rgba(255, 202, 40, 0.25);
+}
+
