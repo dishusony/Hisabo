@@ -4,8 +4,8 @@
   "type": "module",
   "description": "Hisabo - Smart Monthly Expense Tracker Web Application",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
+    "start": "node backend/server.js",
+    "dev": "node backend/server.js",
     "build": "echo Static build ready"
   },
   "engines": {

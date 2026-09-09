@@ -1,9 +1,10 @@
+/**
+ * api/index.js - Vercel Serverless Function Handler
+ * Forwards incoming HTTP requests to Express app.
+ */
+
+import app from '../backend/server.js';
+
 export default function handler(req, res) {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({
-    status: 'ok',
-    url: req.url,
-    version: process.version
-  }));
+  return app(req, res);
 }

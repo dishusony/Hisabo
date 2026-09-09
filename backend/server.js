@@ -10,17 +10,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Import Routes & Middleware
-import authRoutes from './backend/routes/auth.routes.js';
-import expensesRoutes from './backend/routes/expenses.routes.js';
-import budgetsRoutes from './backend/routes/budgets.routes.js';
-import analyticsRoutes from './backend/routes/analytics.routes.js';
-import { errorHandler } from './backend/middleware/errorHandler.js';
+import authRoutes from './routes/auth.routes.js';
+import expensesRoutes from './routes/expenses.routes.js';
+import budgetsRoutes from './routes/budgets.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
 
 // 1. Securely load .env file into process.env strictly on the server side
-const envPath = path.join(__dirname, '.env');
+const envPath = path.join(rootDir, '.env');
 if (fs.existsSync(envPath)) {
   try {
     const envContent = fs.readFileSync(envPath, 'utf8');
@@ -105,7 +106,7 @@ app.use('/api/budgets', budgetsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 // Static Asset Serving
-app.use(express.static(__dirname, {
+app.use(express.static(rootDir, {
   dotfiles: 'deny',
   index: 'index.html',
   setHeaders: (res, filePath) => {
@@ -120,7 +121,7 @@ app.use(express.static(__dirname, {
 // Centralized Error Handler
 app.use(errorHandler);
 
-// Start Server
+// Start Server when run directly
 let server = null;
 if (!process.env.VERCEL) {
   server = app.listen(PORT, HOST, () => {
@@ -132,4 +133,5 @@ if (!process.env.VERCEL) {
   });
 }
 
+export default app;
 export { app, server };
