@@ -1,8 +1,10 @@
 /**
- * api/index.js - Vercel Serverless Function Entry Point for Hisabo
- * Exports the Express app instance to handle serverless API requests.
+ * api/index.js - Vercel Serverless Function Handler
+ * Forwards incoming HTTP requests to Express app.
  */
 
 import { app } from '../server.js';
 
-export default app;
+export default function handler(req, res) {
+  return app(req, res);
+}
