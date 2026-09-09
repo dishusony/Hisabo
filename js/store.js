@@ -1,14 +1,11 @@
 /**
- * store.js - State Management & LocalStorage Persistence
- * Handles all CRUD operations, monthly budgets, calculations, and demo data.
+ * store.js - State Management & Database Persistence
+ * Connects directly to the backend SQLite database as the single source of truth for expenses.
  */
 
 import { api } from './api.js';
-import { cloudSync } from './firebase-sync.js';
 
 const STORAGE_KEYS = {
-  EXPENSES: 'hisabo_expenses_v1',
-  BUDGETS: 'hisabo_budgets_v1',
   THEME: 'hisabo_theme_v1',
   SELECTED_MONTH: 'hisabo_selected_month_v1'
 };
@@ -40,10 +37,13 @@ export const DEFAULT_BUDGET = 25000;
 class ExpenseStore {
   constructor() {
     this.expenses = [];
-    this.budgets = {};
+    this.budgets = {
+      '2026-09': 25000,
+      '2026-08': 25000,
+      '2026-07': 22000
+    };
     this.currentUser = null;
     this.selectedMonth = this.getInitialMonth();
-    this.init();
   }
 
   getInitialMonth() {
@@ -59,61 +59,6 @@ class ExpenseStore {
     const y = today.getFullYear();
     const m = String(today.getMonth() + 1).padStart(2, '0');
     return `${y}-${m}`;
-  }
-
-  init() {
-    try {
-      if (typeof localStorage === 'undefined') {
-        this.loadDemoData();
-        return;
-      }
-      const storedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES) || 
-                             localStorage.getItem('rupeeflow_expenses_v1');
-      if (storedExpenses) {
-        this.expenses = JSON.parse(storedExpenses);
-      } else {
-        this.loadDemoData();
-      }
-
-      const storedBudgets = localStorage.getItem(STORAGE_KEYS.BUDGETS) || 
-                            localStorage.getItem('rupeeflow_budgets_v1');
-      if (storedBudgets) {
-        this.budgets = JSON.parse(storedBudgets);
-      } else {
-        this.budgets = {
-          '2026-09': 25000,
-          '2026-08': 25000,
-          '2026-07': 22000
-        };
-        this.saveBudgets();
-      }
-    } catch (e) {
-      console.error('Failed to parse localStorage data:', e);
-      this.expenses = [];
-      this.budgets = {};
-    }
-  }
-
-  saveExpenses() {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(this.expenses));
-        localStorage.setItem('rupeeflow_expenses_v1', JSON.stringify(this.expenses));
-      }
-    } catch (e) {
-      console.error('Error saving expenses:', e);
-    }
-  }
-
-  saveBudgets() {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(this.budgets));
-        localStorage.setItem('rupeeflow_budgets_v1', JSON.stringify(this.budgets));
-      }
-    } catch (e) {
-      console.error('Error saving budgets:', e);
-    }
   }
 
   setSelectedMonth(monthKey) {
@@ -136,24 +81,49 @@ class ExpenseStore {
     return DEFAULT_BUDGET;
   }
 
-  setBudget(monthKey, amount) {
+  async setBudget(monthKey, amount) {
     const val = Number(amount);
     if (!isNaN(val) && val >= 0) {
       this.budgets[monthKey] = Math.round(val);
-      this.saveBudgets();
       if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-        api.setBudget(monthKey, Math.round(val)).then(res => {
+        try {
+          const res = await api.setBudget(monthKey, Math.round(val));
           if (res?.alertInfo?.alertsTriggered?.length && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('hisabo:budget-alerts', { detail: res.alertInfo }));
           }
-        }).catch(() => {});
-      }
-      if (this.currentUser?.email) {
-        cloudSync.saveBudgets(this.currentUser.email, this.budgets).catch(() => {});
+        } catch (err) {
+          console.warn('[Store] Failed to save budget to database:', err.message);
+        }
       }
       return true;
     }
     return false;
+  }
+
+  /**
+   * Loads the authoritative list of user expenses and budgets from the backend database.
+   * Does NOT restore old data from localStorage.
+   */
+  async loadFromDatabase() {
+    if (typeof fetch === 'undefined' || !api?.hasToken || !api.hasToken()) {
+      return false;
+    }
+
+    try {
+      const [expenses, budgets] = await Promise.all([
+        api.getExpenses(),
+        api.getBudgets().catch(() => ({}))
+      ]);
+
+      this.expenses = Array.isArray(expenses) ? expenses : [];
+      if (budgets && typeof budgets === 'object') {
+        this.budgets = { ...this.budgets, ...budgets };
+      }
+      return true;
+    } catch (err) {
+      console.warn('[Store] Could not load expenses from database:', err.message);
+      return false;
+    }
   }
 
   getAllExpenses() {
@@ -171,7 +141,10 @@ class ExpenseStore {
     return this.expenses.find(item => item.id === id) || null;
   }
 
-  addExpense(data) {
+  /**
+   * Adds an expense to the backend database and updates state.
+   */
+  async addExpense(data) {
     const date = data.date || new Date().toISOString().split('T')[0];
     const monthKey = date.substring(0, 7);
     const amount = parseFloat(data.amount);
@@ -183,42 +156,38 @@ class ExpenseStore {
       throw new Error('Expense item name is required');
     }
 
-    const newExpense = {
-      id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-      date: date,
-      monthKey: monthKey,
+    const payload = {
+      date,
+      monthKey,
       item: data.item.trim(),
       amount: Math.round(amount * 100) / 100,
       paymentMethod: data.paymentMethod || 'UPI',
       category: data.category || 'Food',
-      notes: (data.notes || '').trim(),
-      userEmail: data.userEmail || (this.currentUser ? this.currentUser.email : null),
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      notes: (data.notes || '').trim()
     };
 
-    this.expenses.unshift(newExpense);
-    this.saveExpenses();
-
-    // Async cloud sync if authenticated
+    let newExpense;
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      api.createExpense(newExpense).then(res => {
-        if (res?.alertInfo?.alertsTriggered?.length && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('hisabo:budget-alerts', { detail: res.alertInfo }));
-        }
-      }).catch(() => {});
+      // Save directly to the backend database
+      newExpense = await api.createExpense(payload);
+    } else {
+      // Offline / guest fallback
+      newExpense = {
+        id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        ...payload,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
     }
 
-    // Real-time Firebase Firestore cloud sync
-    const activeEmail = newExpense.userEmail || (this.currentUser ? this.currentUser.email : null);
-    if (activeEmail) {
-      cloudSync.saveExpense(activeEmail, newExpense).catch(() => {});
-    }
-
+    this.expenses.unshift(newExpense);
     return newExpense;
   }
 
-  updateExpense(id, data) {
+  /**
+   * Updates an expense in the backend database and updates state.
+   */
+  async updateExpense(id, data) {
     const index = this.expenses.findIndex(item => item.id === id);
     if (index === -1) {
       throw new Error('Expense not found');
@@ -230,55 +199,47 @@ class ExpenseStore {
       throw new Error('Amount must be a positive number');
     }
 
-    this.expenses[index] = {
-      ...this.expenses[index],
-      date: date,
+    const updatePayload = {
+      date,
       monthKey: date.substring(0, 7),
-      item: data.item.trim(),
+      item: data.item ? data.item.trim() : this.expenses[index].item,
       amount: Math.round(amount * 100) / 100,
       paymentMethod: data.paymentMethod || this.expenses[index].paymentMethod,
       category: data.category || this.expenses[index].category,
-      notes: (data.notes || '').trim(),
-      updatedAt: Date.now()
+      notes: data.notes !== undefined ? (data.notes || '').trim() : this.expenses[index].notes
     };
 
-    this.saveExpenses();
-
-    // Async cloud sync if authenticated
+    let updatedExpense;
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      api.updateExpense(id, this.expenses[index]).then(res => {
-        if (res?.alertInfo?.alertsTriggered?.length && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('hisabo:budget-alerts', { detail: res.alertInfo }));
-        }
-      }).catch(() => {});
+      updatedExpense = await api.updateExpense(id, updatePayload);
+    } else {
+      updatedExpense = {
+        ...this.expenses[index],
+        ...updatePayload,
+        updatedAt: Date.now()
+      };
     }
 
-    // Real-time Firebase Firestore cloud sync
-    const activeEmail = this.expenses[index].userEmail || (this.currentUser ? this.currentUser.email : null);
-    if (activeEmail) {
-      cloudSync.saveExpense(activeEmail, this.expenses[index]).catch(() => {});
-    }
-
-    return this.expenses[index];
+    this.expenses[index] = updatedExpense;
+    return updatedExpense;
   }
 
-  deleteExpense(id) {
-    const initialLength = this.expenses.length;
-    this.expenses = this.expenses.filter(item => item.id !== id);
-    const removed = initialLength > this.expenses.length;
-    if (removed) {
-      this.saveExpenses();
-      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-        api.deleteExpense(id).catch(() => {});
-      }
-      if (this.currentUser?.email) {
-        cloudSync.deleteExpense(this.currentUser.email, id).catch(() => {});
-      }
+  /**
+   * Deletes an expense from the backend database and updates state.
+   */
+  async deleteExpense(id) {
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      await api.deleteExpense(id);
+    }
+    const index = this.expenses.findIndex(item => item.id === id);
+    let removed = null;
+    if (index !== -1) {
+      removed = this.expenses.splice(index, 1)[0];
     }
     return removed;
   }
 
-  duplicateExpense(id) {
+  async duplicateExpense(id) {
     const original = this.getExpenseById(id);
     if (!original) {
       throw new Error('Expense to duplicate not found');
@@ -294,31 +255,28 @@ class ExpenseStore {
       notes: original.notes
     };
 
-    return this.addExpense(duplicateData);
+    return await this.addExpense(duplicateData);
   }
 
-  clearMonthExpenses(monthKey = this.selectedMonth) {
+  async clearMonthExpenses(monthKey = this.selectedMonth) {
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      await api.deleteMonth(monthKey).catch(() => {});
+    }
     this.expenses = this.expenses.filter(item => {
       const itemMonth = item.date ? item.date.substring(0, 7) : item.monthKey;
       return itemMonth !== monthKey;
     });
-    this.saveExpenses();
-    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      api.deleteMonth(monthKey).catch(() => {});
-    }
   }
 
-  clearAllExpenses() {
-    this.expenses = [];
-    this.saveExpenses();
+  async clearAllExpenses() {
     if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      api.deleteAllExpenses().catch(() => {});
+      await api.deleteAllExpenses().catch(() => {});
     }
+    this.expenses = [];
   }
 
   getDistinctMonths() {
     const monthsSet = new Set();
-    // Always include current selected month and real today month
     const today = new Date();
     const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     monthsSet.add(currentMonthKey);
@@ -348,125 +306,161 @@ class ExpenseStore {
     let highestExpense = { amount: 0, item: 'None' };
 
     list.forEach(item => {
-      totalSpent += item.amount;
-      if (item.amount > highestExpense.amount) {
-        highestExpense = { amount: item.amount, item: item.item };
+      const amt = Number(item.amount) || 0;
+      totalSpent += amt;
+      if (amt > highestExpense.amount) {
+        highestExpense = { amount: amt, item: item.item };
       }
     });
 
     totalSpent = Math.round(totalSpent * 100) / 100;
     const remaining = Math.round((budget - totalSpent) * 100) / 100;
-    const transactionCount = list.length;
-    const averageExpense = transactionCount > 0 ? Math.round((totalSpent / transactionCount) * 100) / 100 : 0;
-    const percentUsed = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 100;
-    const actualPercent = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
-    const is50PercentReached = actualPercent >= 50;
-    const is90PercentReached = actualPercent >= 90;
-    const is100PercentReached = actualPercent >= 100 || totalSpent >= budget;
-    const isOverBudget = totalSpent > budget;
-    const isNearBudget = !isOverBudget && is90PercentReached;
+    const percentUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+    const count = list.length;
+    const avgExpense = count > 0 ? Math.round((totalSpent / count) * 100) / 100 : 0;
 
     return {
-      monthKey,
       totalSpent,
       budget,
       remaining,
-      transactionCount,
-      averageExpense,
-      highestExpense,
       percentUsed,
-      actualPercent,
-      is50PercentReached,
-      is90PercentReached,
-      is100PercentReached,
-      isOverBudget,
-      isNearBudget
+      count,
+      avgExpense,
+      highestExpense
     };
   }
 
-  getCategoryBreakdown(monthKey = this.selectedMonth) {
+  getCategoryTotals(monthKey = this.selectedMonth) {
     const list = this.getExpensesForMonth(monthKey);
-    const breakdown = {};
+    const totals = {};
 
-    CATEGORIES.forEach(c => {
-      breakdown[c.id] = 0;
+    CATEGORIES.forEach(cat => {
+      totals[cat.id] = 0;
     });
 
     list.forEach(item => {
-      const cat = breakdown[item.category] !== undefined ? item.category : 'Other';
-      breakdown[cat] += item.amount;
+      const cat = item.category || 'Other';
+      const amt = Number(item.amount) || 0;
+      totals[cat] = (totals[cat] || 0) + amt;
     });
 
-    return breakdown;
+    return totals;
   }
 
   getPaymentMethodBreakdown(monthKey = this.selectedMonth) {
     const list = this.getExpensesForMonth(monthKey);
-    const breakdown = {};
+    const totals = {};
 
-    PAYMENT_METHODS.forEach(p => {
-      breakdown[p.id] = 0;
+    PAYMENT_METHODS.forEach(pm => {
+      totals[pm.id] = 0;
     });
 
     list.forEach(item => {
-      const method = breakdown[item.paymentMethod] !== undefined ? item.paymentMethod : 'Other';
-      breakdown[method] += item.amount;
+      const pm = item.paymentMethod || 'Cash';
+      const amt = Number(item.amount) || 0;
+      totals[pm] = (totals[pm] || 0) + amt;
     });
 
-    return breakdown;
+    return totals;
   }
 
-  getDailySpending(monthKey = this.selectedMonth) {
-    const list = this.getExpensesForMonth(monthKey);
-    const [year, month] = monthKey.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
+  getMonthlyTrends(limit = 6) {
+    const allMonths = this.getDistinctMonths();
+    const targetMonths = allMonths.slice(0, limit).reverse();
 
-    const dailyMap = {};
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayStr = `${monthKey}-${String(day).padStart(2, '0')}`;
-      dailyMap[dayStr] = 0;
-    }
-
-    list.forEach(item => {
-      if (dailyMap[item.date] !== undefined) {
-        dailyMap[item.date] += item.amount;
-      }
-    });
-
-    return dailyMap;
-  }
-
-  getHistoricalMonthlyComparison(numMonths = 6) {
-    const months = this.getDistinctMonths().slice(0, numMonths).reverse();
-    return months.map(mKey => {
-      const kpis = this.getMonthKPIs(mKey);
-      const [y, m] = mKey.split('-');
-      const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
-      const label = dateObj.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+    return targetMonths.map(monthKey => {
+      const list = this.getExpensesForMonth(monthKey);
+      const total = list.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const budget = this.getBudget(monthKey);
       return {
-        monthKey: mKey,
-        label,
-        totalSpent: kpis.totalSpent,
-        budget: kpis.budget
+        monthKey,
+        total: Math.round(total * 100) / 100,
+        budget
       };
     });
   }
 
-  loadDemoData() {
-    const demoItems = [
-      // Previous Month (August 2026)
-      { date: '2026-08-01', item: 'Hostel Rent', amount: 6500, paymentMethod: 'Bank Transfer', category: 'Hostel', notes: 'August hostel rent' },
-      { date: '2026-08-05', item: 'New Running Shoes', amount: 2499, paymentMethod: 'Credit Card', category: 'Shopping', notes: 'Independence Day Sale' },
-      { date: '2026-08-10', item: 'Dinner at Barbeque Nation', amount: 1800, paymentMethod: 'Debit Card', category: 'Food', notes: 'Birthday celebration' },
-      { date: '2026-08-15', item: 'Weekend Road Trip Petrol & Tolls', amount: 2200, paymentMethod: 'UPI', category: 'Travel', notes: 'Long weekend getaway' },
-      { date: '2026-08-20', item: 'Mobile Postpaid & OTT Subscription', amount: 899, paymentMethod: 'UPI', category: 'Bills', notes: 'Airtel + Netflix' },
-      { date: '2026-08-26', item: 'Books & Stationery for Semester', amount: 1150, paymentMethod: 'Cash', category: 'Education', notes: 'Reference guides' },
+  getInsights(monthKey = this.selectedMonth) {
+    const kpi = this.getMonthKPIs(monthKey);
+    const catTotals = this.getCategoryTotals(monthKey);
+    const insights = [];
 
-      // July 2026
-      { date: '2026-07-02', item: 'Hostel Rent', amount: 6500, paymentMethod: 'Bank Transfer', category: 'Hostel', notes: 'July rent' },
-      { date: '2026-07-12', item: 'Formal Shirts & Trousers', amount: 3200, paymentMethod: 'Credit Card', category: 'Shopping', notes: 'Campus placement preparation' },
-      { date: '2026-07-18', item: 'Dental Checkup & Cleaning', amount: 1500, paymentMethod: 'UPI', category: 'Health', notes: 'Clinic visit' },
-      { date: '2026-07-25', item: 'Cafe Coffee Day Meetup', amount: 480, paymentMethod: 'UPI', category: 'Food', notes: 'Study group' }
+    // 1. Budget Pace Alert
+    if (kpi.percentUsed >= 100) {
+      insights.push({
+        type: 'danger',
+        icon: 'alert-triangle',
+        title: 'Budget Exceeded',
+        text: `You have crossed your monthly budget by ${Math.abs(kpi.remaining).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}.`
+      });
+    } else if (kpi.percentUsed >= 80) {
+      insights.push({
+        type: 'warning',
+        icon: 'trending-up',
+        title: 'High Budget Usage',
+        text: `You have consumed ${kpi.percentUsed}% of your budget with ${formatRemainingDays(monthKey)} days left in the month.`
+      });
+    } else if (kpi.percentUsed > 0) {
+      insights.push({
+        type: 'success',
+        icon: 'shield-check',
+        title: 'Budget On Track',
+        text: `You have consumed ${kpi.percentUsed}% of your budget. You have ${kpi.remaining.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} left to spend safely.`
+      });
+    }
+
+    // 2. Dominant Category
+    let topCat = null;
+    let topCatAmt = 0;
+    Object.keys(catTotals).forEach(cat => {
+      if (catTotals[cat] > topCatAmt) {
+        topCatAmt = catTotals[cat];
+        topCat = cat;
+      }
+    });
+
+    if (topCat && kpi.totalSpent > 0) {
+      const topCatPct = Math.round((topCatAmt / kpi.totalSpent) * 100);
+      insights.push({
+        type: 'info',
+        icon: 'pie-chart',
+        title: `Top Expense: ${topCat}`,
+        text: `${topCatPct}% of your total expenses (${topCatAmt.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}) was spent on ${topCat}.`
+      });
+    }
+
+    return insights;
+  }
+
+  setCurrentUser(user) {
+    this.currentUser = user || null;
+    if (!user) {
+      this.expenses = [];
+    }
+  }
+
+  getCurrentUser() {
+    return this.currentUser;
+  }
+
+  getUserExpenseCount(email = (this.currentUser ? this.currentUser.email : null)) {
+    return this.expenses.length;
+  }
+
+  loadDemoData() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+
+    const demoItems = [
+      { item: 'Grocery Shopping at D-Mart', amount: 3450, category: 'Food', paymentMethod: 'UPI', date: `${y}-${m}-02`, notes: 'Monthly provisions and pantry essentials' },
+      { item: 'Electricity & High-speed WiFi', amount: 1850, category: 'Bills', paymentMethod: 'Debit Card', date: `${y}-${m}-04`, notes: 'Broadband + apartment electricity' },
+      { item: 'Metro Travel SmartCard Recharge', amount: 800, category: 'Travel', paymentMethod: 'UPI', date: `${y}-${m}-06`, notes: 'Daily commute to college/office' },
+      { item: 'Zomato Biryani & Sweets with Friends', amount: 1240, category: 'Food', paymentMethod: 'UPI', date: `${y}-${m}-08`, notes: 'Weekend celebration dinner' },
+      { item: 'Udemy FullStack System Design Course', amount: 549, category: 'Education', paymentMethod: 'Credit Card', date: `${y}-${m}-10`, notes: 'Skill enhancement bootcamp' },
+      { item: 'BookMyShow Movie & Popcorn Outing', amount: 920, category: 'Entertainment', paymentMethod: 'UPI', date: `${y}-${m}-12`, notes: 'Sci-Fi blockbuster premiere' },
+      { item: 'Apollo Pharmacy Vitamins & Skincare', amount: 1100, category: 'Health', paymentMethod: 'Cash', date: `${y}-${m}-15`, notes: 'Monthly multivitamin stock' },
+      { item: 'Amazon Lifestyle Shoes & Denim', amount: 2499, category: 'Shopping', paymentMethod: 'Credit Card', date: `${y}-${m}-18`, notes: 'Campus casual wear sale' }
     ];
 
     this.expenses = demoItems.map((item, index) => ({
@@ -482,106 +476,16 @@ class ExpenseStore {
       '2026-08': 25000,
       '2026-07': 22000
     };
-
-    this.saveExpenses();
-    this.saveBudgets();
   }
+}
 
-  setCurrentUser(user) {
-    this.currentUser = user || null;
-    if (user && user.email) {
-      this.attachCloudSync(user.email);
-    } else {
-      cloudSync.disconnect();
-    }
-  }
+function formatRemainingDays(monthKey) {
+  const today = new Date();
+  const currentKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  if (monthKey !== currentKey) return 0;
 
-  attachCloudSync(email) {
-    if (!email || typeof window === 'undefined') return;
-
-    // Real-time Firestore expenses listener across all open browsers
-    cloudSync.subscribeExpenses(email, (cloudExpenses) => {
-      if (Array.isArray(cloudExpenses)) {
-        if (cloudExpenses.length > 0 || this.expenses.length === 0) {
-          this.expenses = cloudExpenses;
-          this.saveExpenses();
-        } else if (this.expenses.length > 0 && cloudExpenses.length === 0) {
-          // Upload local records to populate new cloud account
-          cloudSync.syncLocalToCloud(email, this.expenses, this.budgets).catch(() => {});
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('hisabo:cloud-sync', { detail: { type: 'expenses', count: this.expenses.length } }));
-        }
-      }
-    });
-
-    // Real-time Firestore budgets listener
-    cloudSync.subscribeBudgets(email, (cloudBudgets) => {
-      if (cloudBudgets && typeof cloudBudgets === 'object' && Object.keys(cloudBudgets).length > 0) {
-        this.budgets = { ...this.budgets, ...cloudBudgets };
-        this.saveBudgets();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('hisabo:cloud-sync', { detail: { type: 'budgets' } }));
-        }
-      }
-    });
-  }
-
-  getCurrentUser() {
-    return this.currentUser;
-  }
-
-  getUserExpenseCount(email = (this.currentUser ? this.currentUser.email : null)) {
-    if (!email) return this.expenses.length;
-    return this.expenses.filter(e => e.userEmail === email || !e.userEmail).length;
-  }
-
-  migrateGuestDataToUser(email) {
-    if (!email) return 0;
-    let count = 0;
-    this.expenses.forEach(item => {
-      if (!item.userEmail) {
-        item.userEmail = email;
-        count++;
-      }
-    });
-    if (count > 0) {
-      this.saveExpenses();
-    }
-    return count;
-  }
-
-  async syncWithBackend() {
-    if (typeof fetch === 'undefined' || !api?.hasToken || !api.hasToken()) {
-      return { synced: false, count: this.expenses.length };
-    }
-
-    try {
-      // 1. Upload local expenses to backend DB
-      if (this.expenses.length > 0) {
-        await api.syncExpenses(this.expenses);
-      }
-
-      // 2. Fetch authoritative user expenses from backend
-      const cloudExpenses = await api.getExpenses();
-      if (Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
-        this.expenses = cloudExpenses;
-        this.saveExpenses();
-      }
-
-      // 3. Fetch authoritative budgets from backend
-      const cloudBudgets = await api.getBudgets();
-      if (cloudBudgets && typeof cloudBudgets === 'object' && Object.keys(cloudBudgets).length > 0) {
-        this.budgets = { ...this.budgets, ...cloudBudgets };
-        this.saveBudgets();
-      }
-
-      return { synced: true, count: this.expenses.length };
-    } catch (err) {
-      console.warn('[Store] Failed to sync with backend:', err.message);
-      return { synced: false, error: err.message };
-    }
-  }
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  return Math.max(0, lastDay - today.getDate());
 }
 
 export const store = new ExpenseStore();
