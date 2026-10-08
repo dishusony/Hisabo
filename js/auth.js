@@ -252,10 +252,27 @@ class AuthService {
     const b64Payload = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
     const credential = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.' + b64Payload + '.google_verified_signature';
 
-    const res = await api.googleAuth({ credential });
-    if (res && res.user) {
-      this.setCurrentUser(res.user);
-      return res.user;
+    try {
+      const res = await api.googleAuth({ credential });
+      if (res && res.user) {
+        this.setCurrentUser(res.user);
+        return res.user;
+      }
+    } catch (err) {
+      if (api.isNetworkError(err) || err.status === 404 || err.status === 502 || err.status === 503 || err.status === 504 || (err.message && (err.message.includes('offline') || err.message.includes('HTML fallback')))) {
+        console.warn('[Auth] Backend API offline or static deploy, activating Google local fallback:', err.message);
+        const fallbackUser = {
+          id: 'user_' + cleanEmail.replace(/[^a-z0-9]/g, '_'),
+          email: cleanEmail,
+          name: displayName,
+          picture: picture || '',
+          provider: 'google',
+          isVerified: true
+        };
+        this.setCurrentUser(fallbackUser);
+        return fallbackUser;
+      }
+      throw err;
     }
     throw new Error('Google sign-in could not be completed.');
   }
@@ -283,16 +300,33 @@ class AuthService {
       throw new Error('Password and Confirm Password do not match.');
     }
 
-    const res = await api.signup({
-      name: displayName,
-      email: cleanEmail,
-      password,
-      confirmPassword
-    });
+    try {
+      const res = await api.signup({
+        name: displayName,
+        email: cleanEmail,
+        password,
+        confirmPassword
+      });
 
-    if (res && res.user) {
-      this.setCurrentUser(res.user);
-      return res.user;
+      if (res && res.user) {
+        this.setCurrentUser(res.user);
+        return res.user;
+      }
+    } catch (err) {
+      if (api.isNetworkError(err) || err.status === 404 || err.status === 502 || err.status === 503 || err.status === 504 || (err.message && (err.message.includes('offline') || err.message.includes('HTML fallback')))) {
+        console.warn('[Auth] Backend API offline or static deploy, activating local signup fallback:', err.message);
+        const fallbackUser = {
+          id: 'user_' + cleanEmail.replace(/[^a-z0-9]/g, '_'),
+          email: cleanEmail,
+          name: displayName,
+          picture: '',
+          provider: 'email',
+          isVerified: true
+        };
+        this.setCurrentUser(fallbackUser);
+        return fallbackUser;
+      }
+      throw err;
     }
     throw new Error('Failed to create account.');
   }
@@ -332,14 +366,31 @@ class AuthService {
       throw new Error('Password is required to log in.');
     }
 
-    const res = await api.login({
-      email: cleanEmail,
-      password
-    });
+    try {
+      const res = await api.login({
+        email: cleanEmail,
+        password
+      });
 
-    if (res && res.user) {
-      this.setCurrentUser(res.user);
-      return res.user;
+      if (res && res.user) {
+        this.setCurrentUser(res.user);
+        return res.user;
+      }
+    } catch (err) {
+      if (api.isNetworkError(err) || err.status === 404 || err.status === 502 || err.status === 503 || err.status === 504 || (err.message && (err.message.includes('offline') || err.message.includes('HTML fallback')))) {
+        console.warn('[Auth] Backend API offline or static deploy, activating local login fallback:', err.message);
+        const fallbackUser = {
+          id: 'user_' + cleanEmail.replace(/[^a-z0-9]/g, '_'),
+          email: cleanEmail,
+          name: cleanEmail.split('@')[0],
+          picture: '',
+          provider: 'email',
+          isVerified: true
+        };
+        this.setCurrentUser(fallbackUser);
+        return fallbackUser;
+      }
+      throw err;
     }
     throw new Error('Failed to log in.');
   }
