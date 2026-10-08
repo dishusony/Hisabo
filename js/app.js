@@ -1,1224 +1,1615 @@
 /**
- * app.js - Main Application Coordinator
- * Connects Store, UI, Charts, and CSV services with DOM event handlers.
+ * app.js - Main Application Coordinator (Design #7 Fintech System)
+ * Manages routing, route protection, real authentication, store synchronization,
+ * chart rendering, modals, and user interactions across all 11 core application views.
  */
 
-import { store, CATEGORIES, PAYMENT_METHODS } from './store.js';
-import { refreshAllCharts, initCharts } from './charts.js';
-import { exportExpensesToCSV, parseCSV } from './csv.js';
-import { authService } from './auth.js';
-import { api } from './api.js';
-import { fireConfetti } from './confetti.js';
+import { store, CATEGORIES, PAYMENT_METHODS } from './store.js?v=3.2';
+import { refreshAllCharts, renderSpendingTrendChart, renderAnalyticsCharts, initCharts } from './charts.js?v=3.2';
+import { authService } from './auth.js?v=3.2';
+import { api } from './api.js?v=3.2';
+import { exportExpensesToCSV, parseCSV } from './csv.js?v=3.2';
 import {
+  formatCurrency,
+  formatDate,
+  formatMonthName,
   updateDashboardKPIs,
-  renderExpenseTable,
-  renderModalCategoryPills,
-  renderModalPaymentPills,
+  renderTransactionsTable,
+  renderIncomeView,
+  renderBudgetView,
+  renderCategoriesView,
+  renderCalendarView,
+  renderCalendarSelectedDay,
+  renderAnalyticsView,
+  renderGoalsView,
+  renderProfileView,
+  renderSettingsView,
+  updateAuthUI,
   openModal,
   closeModal,
   showToast,
-  formatCurrency,
-  formatMonthName,
-  updateAuthUI,
-  updateMailDeliveryUI,
-  highlightNewRow,
-  animateRowDeletion,
-  initRipples
-} from './ui.js';
+  getCategoryBadge,
+  getPaymentBadge,
+  ICONS
+} from './ui.js?v=3.2';
 
-class AppController {
+class HisaaboApp {
   constructor() {
-    this.currentEditingId = null;
-    this.currentDeleteId = null;
-    this.searchQuery = '';
-    this.categoryFilter = 'All';
-    this.sortOption = 'date-desc';
-    this.activeTab = 'expenses';
-    this.currentAuthMode = 'login';
-    this.store = store;
-    this.authService = authService;
+    this.currentRoute = 'dashboard';
+    this.activeSpendingPeriod = 'monthly';
+    this.txFilters = {
+      typeFilter: 'all',
+      categoryFilter: 'All',
+      paymentFilter: 'All',
+      sortOption: 'date-desc',
+      searchQuery: '',
+      currentPage: 1,
+      pageSize: 10
+    };
+    this.pendingDeleteAction = null;
+    this.editingExpenseId = null;
+    this.editingIncomeId = null;
 
-    try { this.initTheme(); } catch (e) { console.warn('[Init] Theme warning:', e); }
-    try { initCharts(); } catch (e) { console.warn('[Init] Charts warning:', e); }
-    try { initRipples(); } catch (e) { console.warn('[Init] Ripples warning:', e); }
-    try { this.initDOM(); } catch (e) { console.warn('[Init] DOM warning:', e); }
-    try { this.initAuth(); } catch (e) { console.warn('[Init] Auth warning:', e); }
-    try { this.initEventListeners(); } catch (e) { console.warn('[Init] Event listeners warning:', e); }
-    try { this.render(); } catch (e) { console.warn('[Init] Render warning:', e); }
-    setTimeout(() => this.checkMailStatus(), 400);
+    this.init();
   }
 
-  async checkMailStatus() {
-    if (typeof fetch === 'undefined') return;
+  async init() {
     try {
-      if (api.hasToken && api.hasToken()) {
-        const status = await api.getMailStatus();
-        updateMailDeliveryUI(status, authService.getCurrentUser()?.email);
-      }
-    } catch (e) {
-      // Backend not reached or token pending
+      initCharts();
+      this.initTheme();
+      this.initAuth();
+      this.initEventListeners();
+      this.handleRouting();
+      window.addEventListener('hashchange', () => this.handleRouting());
+    } catch (err) {
+      console.error('[HisaaboApp] Init error:', err);
     }
   }
 
-  setAuthMode(mode = 'login') {
-    this.currentAuthMode = mode;
-    const isLogin = mode === 'login';
-    const isSignup = mode === 'signup';
-
-    const loginTab = document.getElementById('authTabLogin');
-    const signupTab = document.getElementById('authTabSignup');
-    const modeTabs = document.getElementById('authModeTabs');
-    const gsiContainer = document.getElementById('gsiContainer');
-
-    if (modeTabs) {
-      modeTabs.style.display = 'flex';
-    }
-    if (gsiContainer) {
-      gsiContainer.style.display = 'block';
-    }
-
-    if (loginTab) {
-      loginTab.classList.toggle('active', isLogin);
-      loginTab.setAttribute('aria-selected', isLogin.toString());
-    }
-    if (signupTab) {
-      signupTab.classList.toggle('active', isSignup);
-      signupTab.setAttribute('aria-selected', isSignup.toString());
-    }
-
-    // Panels
-    const loginView = document.getElementById('authLoginView');
-    const signupView = document.getElementById('authSignupView');
-
-    if (loginView) loginView.classList.toggle('active', isLogin);
-    if (signupView) signupView.classList.toggle('active', isSignup);
-
-    // Modal Titles
-    const modalTitle = document.getElementById('authModalTitle');
-    const modalSubtitle = document.getElementById('authModalSubtitle');
-    if (modalTitle) {
-      modalTitle.textContent = isSignup
-        ? 'Create Account & Sign Up'
-        : 'Log In to Hisabo';
-    }
-    if (modalSubtitle) {
-      modalSubtitle.textContent = isSignup
-        ? 'Enter your Full Name, Gmail, and password to sign up'
-        : 'Real Gmail address & password required';
-    }
-
-    this.clearAuthAlerts();
-
-    const authDialog = document.querySelector('#authModal .modal-dialog');
-    if (authDialog) authDialog.scrollTop = 0;
-
-    if (isSignup) {
-      const nameInput = document.getElementById('signupNameInput');
-      if (nameInput) setTimeout(() => nameInput.focus(), 150);
-    } else {
-      const emailInput = document.getElementById('loginGmailInput');
-      if (emailInput) setTimeout(() => emailInput.focus(), 150);
-    }
+  /* --------------------------------------------------------------------------
+     THEME & APPEARANCE
+     -------------------------------------------------------------------------- */
+  initTheme() {
+    const savedTheme = localStorage.getItem('hisabo_theme_v7') || 'midnight';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    const themeSelect = document.getElementById('themeSelect');
+    if (themeSelect) themeSelect.value = savedTheme;
   }
 
-  showAuthError(msg) {
-    const errBox = document.getElementById('authErrorAlert');
-    const successBox = document.getElementById('authSuccessAlert');
-    if (successBox) successBox.style.display = 'none';
-    if (errBox) {
-      errBox.innerHTML = `⚠️ ${msg}`;
-      errBox.style.display = 'block';
-    }
+  setTheme(themeName) {
+    document.documentElement.setAttribute('data-theme', themeName);
+    localStorage.setItem('hisabo_theme_v7', themeName);
+    const themeSelect = document.getElementById('themeSelect');
+    if (themeSelect) themeSelect.value = themeName;
+    refreshAllCharts(store, this.activeSpendingPeriod);
   }
 
-  showAuthSuccess(msg) {
-    const errBox = document.getElementById('authErrorAlert');
-    const successBox = document.getElementById('authSuccessAlert');
-    if (errBox) errBox.style.display = 'none';
-    if (successBox) {
-      successBox.innerHTML = `✅ ${msg}`;
-      successBox.style.display = 'block';
-    }
-  }
-
-  clearAuthAlerts() {
-    const errBox = document.getElementById('authErrorAlert');
-    const successBox = document.getElementById('authSuccessAlert');
-    if (errBox) {
-      errBox.style.display = 'none';
-      errBox.textContent = '';
-    }
-    if (successBox) {
-      successBox.style.display = 'none';
-      successBox.textContent = '';
-    }
-    this.clearGmailInputValidation();
-  }
-
-  validateGmailField(inputEl, errorEl, isSubmitting = false) {
-    if (!inputEl) return false;
-    const value = (inputEl.value || '').trim();
-
-    // If empty and not submitting, keep clean
-    if (!value && !isSubmitting) {
-      if (errorEl) {
-        errorEl.style.display = 'none';
-        errorEl.textContent = '';
-      }
-      inputEl.classList.remove('form-input-error', 'form-input-valid');
-      return false;
-    }
-
-    const isValid = authService.validateGmail(value);
-    if (!isValid) {
-      if (errorEl) {
-        errorEl.textContent = 'Invalid Gmail address. Please enter a valid Gmail.';
-        errorEl.style.display = 'flex';
-      }
-      inputEl.classList.add('form-input-error');
-      inputEl.classList.remove('form-input-valid');
-      return false;
-    } else {
-      if (errorEl) {
-        errorEl.style.display = 'none';
-        errorEl.textContent = '';
-      }
-      inputEl.classList.remove('form-input-error');
-      inputEl.classList.add('form-input-valid');
-      return true;
-    }
-  }
-
-  clearGmailInputValidation() {
-    ['loginGmailInput', 'signupGmailInput'].forEach((id) => {
-      const input = document.getElementById(id);
-      if (input) {
-        input.classList.remove('form-input-error', 'form-input-valid');
-      }
-    });
-    ['loginGmailError', 'signupGmailError'].forEach((id) => {
-      const err = document.getElementById(id);
-      if (err) {
-        err.style.display = 'none';
-        err.textContent = '';
-      }
-    });
-  }
-
+  /* --------------------------------------------------------------------------
+     AUTHENTICATION & ACCESS CONTROL
+     -------------------------------------------------------------------------- */
   initAuth() {
     authService.init();
 
-    // Listen for auth state changes
     authService.onAuthStateChanged(async (user) => {
-      store.setCurrentUser(user);
-      updateAuthUI(user, store);
       if (user) {
-        closeModal('authModal');
-        await store.loadFromDatabase();
-        this.checkMailStatus();
-        this.render();
+        updateAuthUI(user);
+        try {
+          await store.loadFromDatabase();
+        } catch (e) {
+          console.warn('[HisaaboApp] Database load error:', e);
+        }
+        this.updateMonthSelectorDisplay();
+        this.handleRouting();
+        this.renderCurrentView();
       } else {
-        // Enforce Entrance Gate: only valid email can enter
-        this.setAuthMode('login');
-        openModal('authModal');
-        if (this.activeTab === 'expenses') {
-          this.renderTableAndSummary();
-        }
+        store.resetState();
+        this.handleRouting();
       }
     });
 
-    // Check on initial startup: if not authenticated, trigger Entrance Gate
-    if (!authService.isAuthenticated()) {
-      this.setAuthMode('login');
+    // Render Google Identity Services button if available
+    setTimeout(() => {
+      const gsiWrapper = document.getElementById('gsiButtonWrapper');
+      if (gsiWrapper && authService.getGoogleClientId()) {
+        authService.renderGoogleButton(gsiWrapper);
+      }
+    }, 500);
+  }
+
+  /* --------------------------------------------------------------------------
+     ROUTER & ROUTE PROTECTION (Sections 2 & 6)
+     -------------------------------------------------------------------------- */
+  handleRouting() {
+    const hash = window.location.hash.replace('#', '') || 'home';
+    const isAuthed = authService.isAuthenticated();
+
+    const protectedRoutes = [
+      'dashboard', 'transactions', 'add-expense', 'income',
+      'budget', 'categories', 'calendar', 'analytics',
+      'goals', 'profile', 'settings'
+    ];
+
+    const landingContainer = document.getElementById('landingPage');
+    const appLayout = document.getElementById('appLayout');
+
+    // Route Protection: Redirect unauthenticated requests to sign in
+    if (protectedRoutes.includes(hash) && !isAuthed) {
+      if (landingContainer) landingContainer.style.display = 'flex';
+      if (appLayout) appLayout.style.display = 'none';
+      this.setAuthModalMode('login');
       openModal('authModal');
+      return;
     }
 
-    // Try rendering Google Identity Services button if available
-    const tryRenderGsi = () => {
-      const btnWrapper = document.getElementById('gsiButtonWrapper');
-      const divider = document.getElementById('gsiDivider');
-      if (btnWrapper && authService.getGoogleClientId()) {
-        const rendered = authService.renderGoogleButton(btnWrapper);
-        if (rendered && divider) {
-          divider.style.display = 'flex';
-        }
-      }
-    };
-
-    if (window.google?.accounts?.id) {
-      tryRenderGsi();
-    } else {
-      window.addEventListener('load', () => {
-        setTimeout(tryRenderGsi, 600);
-      });
-    }
-  }
-
-  initTheme() {
-    const savedTheme = localStorage.getItem('hisabo_theme_v1') || 'emerald';
-    this.setTheme(savedTheme, false);
-  }
-
-  setTheme(themeName, persist = true) {
-    const allowed = ['emerald', 'midnight', 'amethyst', 'ocean', 'pearl'];
-    const activeTheme = allowed.includes(themeName) ? themeName : 'emerald';
-
-    document.documentElement.setAttribute('data-theme', activeTheme);
-    if (persist) {
-      localStorage.setItem('hisabo_theme_v1', activeTheme);
+    // Authenticated users redirected from signin/signup/home to dashboard
+    if (isAuthed && (hash === 'home' || hash === 'signin' || hash === 'signup' || hash === '')) {
+      window.location.hash = '#dashboard';
+      return;
     }
 
-    const themeLabels = {
-      emerald: 'Emerald',
-      midnight: 'Midnight',
-      amethyst: 'Amethyst',
-      ocean: 'Ocean',
-      pearl: 'Pearl'
-    };
-
-    const labelEl = document.getElementById('themeBtnLabel');
-    if (labelEl) {
-      labelEl.textContent = themeLabels[activeTheme] || 'Theme';
-    }
-
-    // Update active check in theme modal
-    document.querySelectorAll('.theme-card').forEach(card => {
-      card.classList.toggle('active', card.dataset.setTheme === activeTheme);
-    });
-
-    if (this.activeTab === 'analytics') {
-      try {
-        refreshAllCharts(store);
-      } catch (err) {
-        console.warn('[Theme] Chart refresh deferred:', err);
-      }
-    }
-  }
-
-  initDOM() {
-    // Populate hidden native Category selects
-    const catFormSelect = document.getElementById('expenseCategory');
-    if (catFormSelect) {
-      catFormSelect.innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
-    }
-
-    // Populate hidden native Payment selects
-    const payFormSelect = document.getElementById('expensePayment');
-    if (payFormSelect) {
-      payFormSelect.innerHTML = PAYMENT_METHODS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
-    }
-
-    // Initialize interactive pills with default selections
-    renderModalCategoryPills('Food');
-    renderModalPaymentPills('UPI');
-
-    // Set default date in expense modal to today
-    const dateInput = document.getElementById('expenseDate');
-    if (dateInput) {
-      dateInput.value = new Date().toISOString().split('T')[0];
-    }
-  }
-
-  initEventListeners() {
-    // Theme Picker Button & Cards
-    document.getElementById('themePickerBtn')?.addEventListener('click', () => openModal('themeModal'));
-
-    document.querySelectorAll('.theme-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const theme = card.dataset.setTheme;
-        this.setTheme(theme);
-        const name = card.querySelector('.theme-name')?.innerText.split('(')[0].trim() || theme;
-        showToast(`Theme changed to ${name}!`);
-      });
-    });
-
-    // Navigation Tabs Switcher
-    document.querySelectorAll('.view-tab').forEach(tabBtn => {
-      tabBtn.addEventListener('click', () => {
-        const tab = tabBtn.dataset.tab;
-        this.switchTab(tab);
-      });
-    });
-
-    // Month Navigation
-    document.getElementById('prevMonthBtn')?.addEventListener('click', () => this.shiftMonth(-1));
-    document.getElementById('nextMonthBtn')?.addEventListener('click', () => this.shiftMonth(1));
-    document.getElementById('currentMonthBtn')?.addEventListener('click', () => this.goToCurrentMonth());
-    document.getElementById('monthSelect')?.addEventListener('change', (e) => {
-      store.setSelectedMonth(e.target.value);
-      this.render();
-    });
-
-    // Add Expense Trigger
-    const addExpenseButtons = document.querySelectorAll('.trigger-add-expense');
-    addExpenseButtons.forEach(btn => {
-      btn.addEventListener('click', () => this.openAddExpenseModal());
-    });
-
-    // Expense Form Submit
-    document.getElementById('expenseForm')?.addEventListener('submit', (e) => this.handleExpenseSubmit(e));
-
-    // Modal Close Buttons
-    document.querySelectorAll('[data-close-modal]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const modalId = e.currentTarget.getAttribute('data-close-modal');
-        closeModal(modalId);
-      });
-    });
-
-    // Close modals on background click (except authModal when unauthenticated)
-    document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
-      backdrop.addEventListener('click', (e) => {
-        if (e.target === backdrop) {
-          if (backdrop.id === 'authModal' && !authService.isAuthenticated()) {
-            return; // Entrance gate cannot be dismissed without valid email
-          }
-          backdrop.classList.remove('modal-active');
-          document.body.style.overflow = '';
-        }
-      });
-    });
-
-    // Budget Modal
-    document.getElementById('editBudgetBtn')?.addEventListener('click', () => this.openBudgetModal());
-    document.getElementById('budgetForm')?.addEventListener('submit', (e) => this.handleBudgetSubmit(e));
-
-    // Delete Confirmation
-    document.getElementById('confirmDeleteBtn')?.addEventListener('click', () => this.handleConfirmDelete());
-
-    // Instant Category Filter Chips
-    document.querySelectorAll('#categoryChipsBar .chip-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#categoryChipsBar .chip-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.categoryFilter = btn.dataset.category;
-        this.renderTableAndSummary();
-      });
-    });
-
-    // Search Controls
-    const searchInput = document.getElementById('searchInput');
-    const clearSearchBtn = document.getElementById('clearSearchBtn');
-
-    searchInput?.addEventListener('input', (e) => {
-      this.searchQuery = e.target.value.trim().toLowerCase();
-      if (clearSearchBtn) {
-        clearSearchBtn.style.display = this.searchQuery ? 'block' : 'none';
-      }
-      this.renderTableAndSummary();
-    });
-
-    clearSearchBtn?.addEventListener('click', () => {
-      if (searchInput) searchInput.value = '';
-      this.searchQuery = '';
-      clearSearchBtn.style.display = 'none';
-      this.renderTableAndSummary();
-      searchInput?.focus();
-    });
-
-    // Sort Dropdown
-    document.getElementById('sortSelect')?.addEventListener('change', (e) => {
-      this.sortOption = e.target.value;
-      this.renderTableAndSummary();
-    });
-
-    // CSV Export & Import
-    document.getElementById('exportCsvBtn')?.addEventListener('click', () => this.handleExportCSV());
-    document.getElementById('importCsvBtn')?.addEventListener('click', () => openModal('importModal'));
-    document.getElementById('csvFileInput')?.addEventListener('change', (e) => this.handleCSVFileSelected(e));
-
-    // Clear Month / All
-    document.getElementById('clearDataTriggerBtn')?.addEventListener('click', () => openModal('clearConfirmModal'));
-    document.getElementById('confirmClearMonthBtn')?.addEventListener('click', async () => {
-      await store.clearMonthExpenses(store.getSelectedMonth());
-      closeModal('clearConfirmModal');
-      showToast(`Cleared all expenses for ${formatMonthName(store.getSelectedMonth())}`);
-      this.render();
-    });
-    document.getElementById('confirmClearAllBtn')?.addEventListener('click', async () => {
-      await store.clearAllExpenses();
-      closeModal('clearConfirmModal');
-      showToast('Cleared all historical expense data');
-      this.render();
-    });
-
-    // Demo Data
-    document.getElementById('loadDemoDataBtn')?.addEventListener('click', () => {
-      store.loadDemoData();
-      showToast('Loaded realistic demo data successfully!');
-      fireConfetti({ particleCount: 75, spread: 80 });
-      this.render();
-      this.switchTab('expenses');
-    });
-
-    // ========================================================================
-    // Gmail & Google Authentication Event Listeners
-    // ========================================================================
-    document.getElementById('googleSignInBtn')?.addEventListener('click', () => {
-      this.setAuthMode('login');
+    if (hash === 'signin') {
+      if (landingContainer) landingContainer.style.display = 'flex';
+      if (appLayout) appLayout.style.display = 'none';
+      this.setAuthModalMode('login');
       openModal('authModal');
-    });
+      return;
+    }
 
-    document.getElementById('toolsAccountBtn')?.addEventListener('click', () => {
-      if (authService.isAuthenticated()) {
-        const dropdown = document.getElementById('userProfileDropdown');
-        dropdown?.classList.toggle('active');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        this.setAuthMode('login');
-        openModal('authModal');
-      }
-    });
-
-    // Auth Mode Segmented Tab Switchers
-    document.getElementById('authTabLogin')?.addEventListener('click', () => {
-      this.setAuthMode('login');
-    });
-
-    document.getElementById('authTabSignup')?.addEventListener('click', () => {
-      this.setAuthMode('signup');
-    });
-
-    document.getElementById('authModeToggleLink')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      this.setAuthMode(this.currentAuthMode === 'signup' ? 'login' : 'signup');
-    });
-
-    // User Profile Dropdown Toggle
-    const profileBtn = document.getElementById('userProfileBtn');
-    const profileDropdown = document.getElementById('userProfileDropdown');
-    profileBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = profileDropdown?.classList.toggle('active');
-      profileBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      const countEl = document.getElementById('dropdownExpenseCount');
-      if (countEl) {
-        countEl.textContent = store.getUserExpenseCount(authService.getCurrentUser()?.email);
-      }
-    });
-
-    // Close profile dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-      if (profileDropdown?.classList.contains('active')) {
-        if (!profileDropdown.contains(e.target) && !profileBtn?.contains(e.target)) {
-          profileDropdown.classList.remove('active');
-          profileBtn?.setAttribute('aria-expanded', 'false');
-        }
-      }
-    });
-
-    // Sign Out
-    document.getElementById('logoutBtn')?.addEventListener('click', () => {
-      profileDropdown?.classList.remove('active');
-      authService.logout();
-      showToast('Signed out of Google Account');
-      this.render();
-    });
-
-    // Switch Account
-    document.getElementById('switchAccountBtn')?.addEventListener('click', () => {
-      profileDropdown?.classList.remove('active');
-      this.setAuthMode('login');
+    if (hash === 'signup') {
+      if (landingContainer) landingContainer.style.display = 'flex';
+      if (appLayout) appLayout.style.display = 'none';
+      this.setAuthModalMode('signup');
       openModal('authModal');
-    });
+      return;
+    }
 
-    // Sync Guest Expenses to Signed-in User
-    document.getElementById('syncGuestDataBtn')?.addEventListener('click', () => {
-      const user = authService.getCurrentUser();
-      if (user) {
-        const count = store.migrateGuestDataToUser(user.email);
-        profileDropdown?.classList.remove('active');
-        if (count > 0) {
-          showToast(`Synced ${count} guest expenses to ${user.email}!`);
-        } else {
-          showToast('All current expenses are already bound to your account.');
-        }
-        updateAuthUI(user, store);
-        this.render();
-      }
-    });
+    if (!isAuthed) {
+      // Show unauthenticated landing page
+      if (landingContainer) landingContainer.style.display = 'flex';
+      if (appLayout) appLayout.style.display = 'none';
+      return;
+    }
 
-    // Auth Mode Segmented Tab Switchers & Nav Buttons
-    document.getElementById('authTabLogin')?.addEventListener('click', () => {
-      this.setAuthMode('login');
-    });
+    // Authenticated view active
+    if (landingContainer) landingContainer.style.display = 'none';
+    if (appLayout) appLayout.style.display = 'flex';
 
-    document.getElementById('authTabSignup')?.addEventListener('click', () => {
-      this.setAuthMode('signup');
-    });
-
-    document.getElementById('toggleToSignupBtn')?.addEventListener('click', () => {
-      this.setAuthMode('signup');
-    });
-
-    document.getElementById('toggleToLoginBtn')?.addEventListener('click', () => {
-      this.setAuthMode('login');
-    });
-
-
-    // ========================================================================
-    // Immediate Gmail Real-time Validation Listeners (Input + Blur)
-    // ========================================================================
-    const loginEmailInput = document.getElementById('loginGmailInput');
-    const loginEmailErr = document.getElementById('loginGmailError');
-    loginEmailInput?.addEventListener('input', () => {
-      this.validateGmailField(loginEmailInput, loginEmailErr, false);
-    });
-    loginEmailInput?.addEventListener('blur', () => {
-      if (loginEmailInput.value) {
-        this.validateGmailField(loginEmailInput, loginEmailErr, true);
-      }
-    });
-
-    const signupEmailInput = document.getElementById('signupGmailInput');
-    const signupEmailErr = document.getElementById('signupGmailError');
-    signupEmailInput?.addEventListener('input', () => {
-      this.validateGmailField(signupEmailInput, signupEmailErr, false);
-    });
-    signupEmailInput?.addEventListener('blur', () => {
-      if (signupEmailInput.value) {
-        this.validateGmailField(signupEmailInput, signupEmailErr, true);
-      }
-    });
-
-    // ========================================================================
-    // 1. Strict Log In Form Handler (Verified Gmail + Password)
-    // ========================================================================
-    document.getElementById('authLoginForm')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      this.clearAuthAlerts();
-
-      const emailInput = document.getElementById('loginGmailInput');
-      const passInput = document.getElementById('loginPasswordInput');
-      const submitBtn = document.getElementById('loginSubmitBtn');
-
-      const rawEmail = (emailInput?.value || '').trim().toLowerCase();
-      const rawPass = passInput?.value || '';
-
-      // Validate strict Gmail immediately
-      if (!this.validateGmailField(emailInput, document.getElementById('loginGmailError'), true)) {
-        this.showAuthError('Invalid Gmail address. Please enter a valid Gmail.');
-        emailInput?.focus();
-        return;
-      }
-
-      if (!rawPass) {
-        this.showAuthError('Please enter your password to log in.');
-        passInput?.focus();
-        return;
-      }
-
-      const origText = submitBtn ? submitBtn.innerHTML : '';
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = 'Verifying Credentials...';
-      }
-
-      try {
-        const user = await authService.loginWithGmail(rawEmail, rawPass);
-        closeModal('authModal');
-        fireConfetti({ particleCount: 60, spread: 70 });
-        showToast(`🎉 Access Granted! Welcome back, ${user.givenName || user.name}!`);
-        this.render();
-      } catch (err) {
-        this.showAuthError(err.message || 'Invalid Gmail address or password.');
-        showToast(err.message || 'Login failed', 'error');
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = origText;
-        }
-      }
-    });
-
-    // ========================================================================
-    // 2. Strict Sign Up Form Handler (Full Name + Gmail + Password)
-    // ========================================================================
-    document.getElementById('authSignupForm')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      this.clearAuthAlerts();
-
-      const nameInput = document.getElementById('signupNameInput');
-      const emailInput = document.getElementById('signupGmailInput');
-      const passInput = document.getElementById('signupPasswordInput');
-      const submitBtn = document.getElementById('signupSubmitBtn');
-
-      const rawName = (nameInput?.value || '').trim();
-      const rawEmail = (emailInput?.value || '').trim().toLowerCase();
-      const rawPass = passInput?.value || '';
-
-      // Validate compulsory Full Name
-      if (!authService.validateName(rawName)) {
-        this.showAuthError('Compulsory: Please enter your Full Name (minimum 2 characters, letters required).');
-        nameInput?.focus();
-        return;
-      }
-
-      // Strict Real Gmail domain and format validation
-      if (!this.validateGmailField(emailInput, document.getElementById('signupGmailError'), true)) {
-        this.showAuthError('Invalid Gmail address. Please enter a valid Gmail.');
-        emailInput?.focus();
-        return;
-      }
-
-      // Validate Password length
-      if (!rawPass || rawPass.length < 6) {
-        this.showAuthError('Password must be at least 6 characters long.');
-        passInput?.focus();
-        return;
-      }
-
-      const origText = submitBtn ? submitBtn.innerHTML : '';
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = 'Creating Account...';
-      }
-
-      try {
-        const user = await authService.signupWithGmail({
-          name: rawName,
-          email: rawEmail,
-          password: rawPass
-        });
-
-        closeModal('authModal');
-        fireConfetti({ particleCount: 80, spread: 80 });
-        showToast(`🎉 Account Created! Welcome to Hisabo, ${user.givenName || user.name}!`);
-        this.render();
-      } catch (err) {
-        this.showAuthError(err.message || 'Failed to create account.');
-        showToast(err.message || 'Signup failed', 'error');
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = origText;
-        }
-      }
-    });
-
-    // Real Gmail Delivery Configuration Modal Handlers
-    const openMailConfig = () => {
-      const user = authService.getCurrentUser();
-      const emailInput = document.getElementById('cfgSenderEmail');
-      const errorBox = document.getElementById('mailConfigError');
-      if (emailInput && user?.email) {
-        emailInput.value = user.email;
-      }
-      if (errorBox) {
-        errorBox.style.display = 'none';
-        errorBox.textContent = '';
-      }
-      openModal('mailConfigModal');
-    };
-
-    document.getElementById('deliveryActionBtn')?.addEventListener('click', openMailConfig);
-    document.getElementById('configureMailTriggerBtn')?.addEventListener('click', openMailConfig);
-    document.getElementById('toolsConfigureMailBtn')?.addEventListener('click', openMailConfig);
-
-    // Save and verify Gmail SMTP Credentials
-    document.getElementById('mailConfigForm')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const emailInput = document.getElementById('cfgSenderEmail');
-      const passInput = document.getElementById('cfgAppPassword');
-      const sendTestCheck = document.getElementById('cfgSendTestNow');
-      const errorBox = document.getElementById('mailConfigError');
-      const submitBtn = document.getElementById('saveMailConfigBtn');
-
-      const gmailUser = (emailInput?.value || '').trim();
-      const gmailAppPassword = (passInput?.value || '').trim();
-      const sendTestNow = Boolean(sendTestCheck?.checked);
-
-      if (!authService.validateGmail(gmailUser)) {
-        if (errorBox) {
-          errorBox.textContent = '❌ Only valid real Gmail addresses (@gmail.com) are supported.';
-          errorBox.style.display = 'block';
-        }
-        return;
-      }
-
-      if (!gmailAppPassword || gmailAppPassword.replace(/\s+/g, '').length < 10) {
-        if (errorBox) {
-          errorBox.textContent = '❌ Google App Passwords are 16 characters (e.g. abcd efgh ijkl mnop).';
-          errorBox.style.display = 'block';
-        }
-        return;
-      }
-
-      if (errorBox) errorBox.style.display = 'none';
-
-      const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = 'Connecting to Google SMTP & Verifying...';
-      }
-
-      try {
-        const res = await api.configureMail({
-          gmailUser,
-          gmailAppPassword,
-          sendTestNow
-        });
-
-        closeModal('mailConfigModal');
-        showToast(`🎉 Real Gmail Delivery Activated! Live alerts will reach ${gmailUser}.`);
-        if (res.alertsTriggered?.length) {
-          showToast(`⚡ Dispatched ${res.alertsTriggered.length} pending budget alert(s) to your inbox!`);
-        }
-        await this.checkMailStatus();
-        this.render();
-      } catch (err) {
-        if (errorBox) {
-          errorBox.textContent = `❌ ${err.message}`;
-          errorBox.style.display = 'block';
-        }
-        showToast(err.message, 'error');
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = originalBtnText;
-        }
-      }
-    });
-
-    // Test Gmail Alert Notification Handlers
-    const handleSendTestEmail = async (triggerBtn) => {
-      if (!authService.isAuthenticated()) {
-        showToast('Please enter your valid email first to test alerts.', 'error');
-        openModal('authModal');
-        return;
-      }
-
-      const originalHtml = triggerBtn ? triggerBtn.innerHTML : '';
-      if (triggerBtn) {
-        triggerBtn.disabled = true;
-        triggerBtn.innerHTML = '<span>Sending...</span>';
-      }
-
-      try {
-        const res = await api.sendTestEmail();
-        if (res.simulated) {
-          showToast('ℹ️ Simulated Alert: Notification logged on server (add GMAIL_USER & GMAIL_APP_PASSWORD in .env for live inbox delivery).', 'warning');
-        } else if (res.success) {
-          showToast(`✅ Test budget alert delivered to ${authService.getCurrentUser()?.email}!`);
-        } else {
-          showToast(`Email error: ${res.error || 'Failed to dispatch email'}`, 'error');
-        }
-      } catch (err) {
-        showToast(`Email error: ${err.message}`, 'error');
-      } finally {
-        if (triggerBtn) {
-          triggerBtn.disabled = false;
-          triggerBtn.innerHTML = originalHtml;
-        }
-      }
-    };
-
-    document.getElementById('quickTestMailBtn')?.addEventListener('click', (e) => handleSendTestEmail(e.currentTarget));
-    document.getElementById('toolsSendTestEmailBtn')?.addEventListener('click', (e) => handleSendTestEmail(e.currentTarget));
-
-    // Listen for automated budget alert dispatches (50%, 90%, 100%)
-    window.addEventListener('hisabo:budget-alerts', (e) => {
-      const alerts = e.detail?.alertsTriggered || [];
-      alerts.forEach(alert => {
-        if (alert.threshold === 100) {
-          showToast(`🛑 Hisabo Alert: 100% of your monthly budget reached / exceeded! Automated Gmail notification dispatched.`, 'error');
-        } else if (alert.threshold === 90) {
-          showToast(`🚨 Hisabo Alert: 90% of your budget consumed! Automated warning sent via Gmail.`, 'warning');
-        } else if (alert.threshold === 50) {
-          showToast(`⚠️ Hisabo Alert: 50% budget milestone reached! Half of your planned funds used.`, 'warning');
-        }
-      });
-      this.renderTableAndSummary();
-    });
-
-    // Google Client ID Config Accordion
-    const toggleConfigBtn = document.getElementById('toggleClientIdConfigBtn');
-    const configBox = document.getElementById('clientIdConfigBox');
-    const clientIdInput = document.getElementById('googleClientIdInput');
-    const saveClientIdBtn = document.getElementById('saveClientIdBtn');
-
-    toggleConfigBtn?.addEventListener('click', () => {
-      if (configBox) {
-        const isHidden = configBox.style.display === 'none';
-        configBox.style.display = isHidden ? 'block' : 'none';
-        if (isHidden && clientIdInput) {
-          clientIdInput.value = authService.getGoogleClientId();
-          clientIdInput.focus();
-        }
-      }
-    });
-
-    saveClientIdBtn?.addEventListener('click', () => {
-      if (clientIdInput) {
-        const val = clientIdInput.value.trim();
-        authService.setGoogleClientId(val);
-        showToast(val ? 'Google Client ID saved!' : 'Google Client ID removed');
-        const btnWrapper = document.getElementById('gsiButtonWrapper');
-        const divider = document.getElementById('gsiDivider');
-        if (btnWrapper && val) {
-          const rendered = authService.renderGoogleButton(btnWrapper);
-          if (rendered && divider) divider.style.display = 'flex';
-        }
-      }
-    });
-
-    // Global keyboard shortcuts (esc will not close unauthenticated gate)
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-backdrop.modal-active').forEach(m => {
-          if (m.id === 'authModal' && !authService.isAuthenticated()) {
-            return; // Cannot bypass entrance gate
-          }
-          m.classList.remove('modal-active');
-        });
-        if (authService.isAuthenticated()) {
-          document.body.style.overflow = '';
-        }
-      }
-    });
+    this.currentRoute = protectedRoutes.includes(hash) ? hash : 'dashboard';
+    this.activateView(this.currentRoute);
   }
 
-  switchTab(tabName) {
-    this.activeTab = tabName;
-
-    // Update Tab Buttons
-    document.querySelectorAll('.view-tab').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabName);
+  activateView(routeId) {
+    // Update sidebar navigation active links
+    document.querySelectorAll('.sidebar-nav-item').forEach(item => {
+      const r = item.getAttribute('data-route');
+      item.classList.toggle('active', r === routeId);
     });
 
-    // Update View Panels
-    const views = {
-      expenses: document.getElementById('viewExpenses'),
-      analytics: document.getElementById('viewAnalytics'),
-      tools: document.getElementById('viewTools')
+    // Switch view containers
+    document.querySelectorAll('.route-view-content').forEach(view => {
+      view.classList.remove('active');
+    });
+
+    const viewElMap = {
+      dashboard: 'viewDashboard',
+      transactions: 'viewTransactions',
+      'add-expense': 'viewAddExpense',
+      income: 'viewIncome',
+      budget: 'viewBudget',
+      categories: 'viewCategories',
+      calendar: 'viewCalendar',
+      analytics: 'viewAnalytics',
+      goals: 'viewGoals',
+      profile: 'viewProfile',
+      settings: 'viewSettings'
     };
 
-    Object.keys(views).forEach(key => {
-      if (views[key]) {
-        views[key].classList.toggle('active', key === tabName);
-      }
-    });
+    const targetEl = document.getElementById(viewElMap[routeId]);
+    if (targetEl) {
+      targetEl.classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
-    // Refresh charts if switching to Analytics tab
-    if (tabName === 'analytics') {
-      setTimeout(() => refreshAllCharts(store), 50);
+    // Close mobile drawer if open
+    this.closeMobileSidebar();
+
+    // Render active view
+    this.renderCurrentView();
+  }
+
+  renderCurrentView() {
+    const monthKey = store.getSelectedMonth();
+    this.updateMonthSelectorDisplay();
+
+    switch (this.currentRoute) {
+      case 'dashboard':
+        updateDashboardKPIs(monthKey);
+        refreshAllCharts(store, this.activeSpendingPeriod);
+        break;
+      case 'transactions':
+        renderTransactionsTable({ ...this.txFilters, monthKey });
+        this.populateTxCategoryFilter();
+        break;
+      case 'add-expense': {
+        const pageDate = document.getElementById('pageExpDate');
+        if (pageDate && !pageDate.value) pageDate.value = new Date().toISOString().split('T')[0];
+        this.renderPills('pageExpCategoryPills', 'pageExpPaymentPills', 'pageExpCategoryHidden', 'pageExpPaymentHidden');
+        break;
+      }
+      case 'income':
+        renderIncomeView(monthKey);
+        break;
+      case 'budget':
+        renderBudgetView(monthKey);
+        break;
+      case 'categories':
+        renderCategoriesView();
+        break;
+      case 'calendar':
+        renderCalendarView(monthKey);
+        break;
+      case 'analytics':
+        renderAnalyticsView(monthKey);
+        renderAnalyticsCharts(store);
+        break;
+      case 'goals':
+        renderGoalsView();
+        break;
+      case 'profile':
+        renderProfileView();
+        break;
+      case 'settings':
+        renderSettingsView();
+        break;
     }
   }
 
-  shiftMonth(offset) {
+  /* --------------------------------------------------------------------------
+     MONTH SELECTOR
+     -------------------------------------------------------------------------- */
+  updateMonthSelectorDisplay() {
+    const monthKey = store.getSelectedMonth();
+    const formatted = formatMonthName(monthKey);
+    const displayEl = document.getElementById('currentMonthDisplay');
+    if (displayEl) displayEl.textContent = formatted;
+
+    const selectEl = document.getElementById('monthSelect');
+    if (selectEl) {
+      // Populate last 12 months if empty
+      if (selectEl.options.length === 0) {
+        const [currY, currM] = monthKey.split('-').map(Number);
+        for (let i = 0; i < 12; i++) {
+          const d = new Date(currY, currM - 1 - i, 1);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = formatMonthName(key);
+          selectEl.appendChild(opt);
+        }
+      }
+      selectEl.value = monthKey;
+    }
+  }
+
+  changeMonth(delta) {
     const current = store.getSelectedMonth();
     const [y, m] = current.split('-').map(Number);
-    const date = new Date(y, m - 1 + offset, 1);
-    const newY = date.getFullYear();
-    const newM = String(date.getMonth() + 1).padStart(2, '0');
-    store.setSelectedMonth(`${newY}-${newM}`);
-    this.render();
+    const nextDate = new Date(y, m - 1 + delta, 1);
+    const newMonthKey = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+    store.setSelectedMonth(newMonthKey);
+    this.renderCurrentView();
   }
 
-  goToCurrentMonth() {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    store.setSelectedMonth(`${y}-${m}`);
-    this.render();
-  }
+  /* --------------------------------------------------------------------------
+     MODAL CONTROLS & PILLS
+     -------------------------------------------------------------------------- */
+  setAuthModalMode(mode = 'login') {
+    this.authModalMode = mode;
+    const isLogin = mode === 'login';
+    const loginView = document.getElementById('authLoginView');
+    const signupView = document.getElementById('authSignupView');
+    const loginForm = document.getElementById('authLoginForm');
+    const signupForm = document.getElementById('authSignupForm');
+    const tabLogin = document.getElementById('authTabLogin');
+    const tabSignup = document.getElementById('authTabSignup');
+    const title = document.getElementById('authModalTitle');
+    const subtitle = document.getElementById('authModalSubtitle');
+    const errorAlert = document.getElementById('authErrorAlert');
+    const successAlert = document.getElementById('authSuccessAlert');
+    const googleBtnText = document.querySelector('#continueWithGoogleBtn span');
+    const authDividerText = document.querySelector('.gsi-container .auth-divider span');
 
-  updateMonthSelectorUI() {
-    const currentMonth = store.getSelectedMonth();
-    const displayLabel = document.getElementById('currentMonthDisplay');
-    if (displayLabel) {
-      displayLabel.textContent = formatMonthName(currentMonth);
+    if (errorAlert) {
+      errorAlert.style.display = 'none';
+      errorAlert.textContent = '';
+    }
+    if (successAlert) {
+      successAlert.style.display = 'none';
+      successAlert.textContent = '';
     }
 
-    const select = document.getElementById('monthSelect');
-    if (select) {
-      const distinctMonths = store.getDistinctMonths();
-      select.innerHTML = distinctMonths.map(m => {
-        return `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${formatMonthName(m)}</option>`;
+    if (loginView) {
+      loginView.classList.toggle('active', isLogin);
+      loginView.style.display = isLogin ? 'block' : 'none';
+    }
+    if (signupView) {
+      signupView.classList.toggle('active', !isLogin);
+      signupView.style.display = isLogin ? 'none' : 'block';
+    }
+
+    if (loginForm) loginForm.style.display = isLogin ? 'block' : 'none';
+    if (signupForm) signupForm.style.display = isLogin ? 'none' : 'block';
+
+    if (tabLogin) tabLogin.classList.toggle('active', isLogin);
+    if (tabSignup) tabSignup.classList.toggle('active', !isLogin);
+
+    if (title) title.textContent = isLogin ? 'Sign In to Hisaabo' : 'Create Your Hisaabo Account';
+    if (subtitle) subtitle.textContent = isLogin ? 'Welcome back! Enter your credentials to access your financial dashboard.' : 'Start your journey to financial freedom in under 30 seconds.';
+
+    if (googleBtnText) {
+      googleBtnText.textContent = isLogin ? 'Sign In with Google' : 'Sign Up with Google';
+    }
+    if (authDividerText) {
+      authDividerText.textContent = isLogin ? 'OR CONTINUE WITH EMAIL' : 'OR SIGN UP WITH EMAIL';
+    }
+  }
+
+  configureGoogleAccountModal(mode = 'login', prefillEmail = '', prefillName = '') {
+    const isLogin = mode === 'login';
+    const titleEl = document.getElementById('googleModalTitle');
+    const subEl = document.getElementById('googleModalSubtitle');
+    const submitBtn = document.getElementById('googleCustomSubmitBtn');
+    const badge1 = document.getElementById('googleBadge1');
+    const badge2 = document.getElementById('googleBadge2');
+    const emailInput = document.getElementById('googleCustomEmailInput');
+    const nameInput = document.getElementById('googleCustomNameInput');
+
+    if (titleEl) titleEl.textContent = isLogin ? 'Sign in with Google' : 'Sign up with Google';
+    if (subEl) subEl.textContent = isLogin ? 'Choose an account to continue to Hisaabo' : 'Choose or enter your Google account to create your Hisaabo profile';
+    if (submitBtn) submitBtn.textContent = isLogin ? 'Sign In with Google' : 'Sign Up with Google';
+    if (badge1) badge1.textContent = isLogin ? 'One-Tap' : 'Sign Up';
+    if (badge2) badge2.textContent = isLogin ? 'One-Tap' : 'Sign Up';
+
+    if (emailInput && prefillEmail) emailInput.value = prefillEmail;
+    if (nameInput && prefillName) nameInput.value = prefillName;
+  }
+
+  renderPills(catContainerId, payContainerId, hiddenCatId, hiddenPayId) {
+    const catContainer = document.getElementById(catContainerId);
+    const payContainer = document.getElementById(payContainerId);
+    const hiddenCat = document.getElementById(hiddenCatId);
+    const hiddenPay = document.getElementById(hiddenPayId);
+
+    const categories = store.getCategories ? store.getCategories() : CATEGORIES;
+
+    if (catContainer) {
+      const activeCat = hiddenCat?.value || 'Food';
+      catContainer.innerHTML = categories.map(c => {
+        const catLabel = c.label || c.name || c.id;
+        const iconSvg = ICONS[c.icon] || ICONS['more-horizontal'] || '';
+        return `
+          <button type="button" class="quick-cat-chip ${c.id === activeCat ? 'active' : ''}" data-cat="${c.id}" title="${catLabel}">
+            <span class="quick-cat-icon">${iconSvg}</span>
+            <span class="quick-cat-label">${catLabel}</span>
+          </button>
+        `;
       }).join('');
+
+      catContainer.querySelectorAll('.quick-cat-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          catContainer.querySelectorAll('.quick-cat-chip').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          if (hiddenCat) hiddenCat.value = btn.dataset.cat;
+        });
+      });
+    }
+
+    if (payContainer) {
+      const activePay = hiddenPay?.value || 'UPI';
+      payContainer.innerHTML = PAYMENT_METHODS.map(p => {
+        const payLabel = p.label || p.name || p.id;
+        const iconSvg = ICONS[p.icon] || ICONS.wallet || '';
+        return `
+          <button type="button" class="payment-method-chip ${p.id === activePay ? 'active' : ''}" data-pay="${p.id}">
+            ${iconSvg}
+            <span>${payLabel}</span>
+          </button>
+        `;
+      }).join('');
+
+      payContainer.querySelectorAll('.payment-method-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          payContainer.querySelectorAll('.payment-method-chip').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          if (hiddenPay) hiddenPay.value = btn.dataset.pay;
+        });
+      });
     }
   }
 
-  openAddExpenseModal() {
-    this.currentEditingId = null;
-    document.getElementById('expenseModalTitle').textContent = 'Add New Expense';
-    document.getElementById('expenseSubmitBtn').textContent = 'Save Expense';
-    document.getElementById('expenseForm').reset();
-    
-    // Default date to today or current month first day
-    const today = new Date().toISOString().split('T')[0];
-    const selectedMonth = store.getSelectedMonth();
-    const currentRealMonth = today.substring(0, 7);
+  populateTxCategoryFilter() {
+    const select = document.getElementById('txFilterCategory');
+    if (!select || select.dataset.populated) return;
 
-    const dateInput = document.getElementById('expenseDate');
-    if (selectedMonth === currentRealMonth) {
-      dateInput.value = today;
-    } else {
-      dateInput.value = `${selectedMonth}-01`;
-    }
-
-    // Default pills: Food and UPI
-    renderModalCategoryPills('Food');
-    renderModalPaymentPills('UPI');
-
-    openModal('expenseModal');
-    setTimeout(() => document.getElementById('expenseAmount')?.focus(), 150);
+    const categories = store.getCategories ? store.getCategories() : CATEGORIES;
+    select.innerHTML = '<option value="All">All Categories</option>' +
+      categories.map(c => {
+        const label = c.label || c.name || c.id;
+        return `<option value="${c.id}">${label}</option>`;
+      }).join('');
+    select.dataset.populated = 'true';
   }
 
-  openEditExpenseModal(id) {
-    const exp = store.getExpenseById(id);
-    if (!exp) return;
+  /* --------------------------------------------------------------------------
+     EVENT LISTENERS & BINDINGS
+     -------------------------------------------------------------------------- */
+  initEventListeners() {
+    // Landing Page CTAs & Modal Triggers
+    document.getElementById('landingSignInBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.setAuthModalMode('login');
+      openModal('authModal');
+    });
+    document.getElementById('landingGetStartedBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.setAuthModalMode('signup');
+      openModal('authModal');
+    });
+    document.getElementById('heroGetStartedBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.setAuthModalMode('signup');
+      openModal('authModal');
+    });
+    document.getElementById('footerGetStartedBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.setAuthModalMode('signup');
+      openModal('authModal');
+    });
+    document.getElementById('heroWatchDemoBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const showcase = document.getElementById('preview');
+      if (showcase) showcase.scrollIntoView({ behavior: 'smooth' });
+    });
 
-    this.currentEditingId = id;
-    document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
-    document.getElementById('expenseSubmitBtn').textContent = 'Update Expense';
+    // Landing Page Navigation Smooth Scroll
+    document.querySelectorAll('.landing-link, .brand-badge-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('#')) {
+          const targetId = href.replace('#', '');
+          const targetEl = document.getElementById(targetId);
+          if (targetEl) {
+            e.preventDefault();
+            targetEl.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      });
+    });
 
-    document.getElementById('expenseDate').value = exp.date;
-    document.getElementById('expenseItem').value = exp.item;
-    document.getElementById('expenseAmount').value = exp.amount;
-    document.getElementById('expenseNotes').value = exp.notes || '';
+    // Auth Modal Tabs & In-Form Switches
+    document.getElementById('authTabLogin')?.addEventListener('click', () => this.setAuthModalMode('login'));
+    document.getElementById('authTabSignup')?.addEventListener('click', () => this.setAuthModalMode('signup'));
+    document.getElementById('signupToSignInBtn')?.addEventListener('click', () => this.setAuthModalMode('login'));
+    document.getElementById('loginToSignUpBtn')?.addEventListener('click', () => this.setAuthModalMode('signup'));
 
-    // Set selected pills
-    renderModalCategoryPills(exp.category);
-    renderModalPaymentPills(exp.paymentMethod);
+    // Forgot Password Link Trigger
+    document.getElementById('loginForgotPasswordLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeModal('authModal');
+      openModal('forgotPasswordModal');
+    });
 
-    openModal('expenseModal');
-    setTimeout(() => document.getElementById('expenseAmount')?.focus(), 150);
+    // Password Visibility Eye Toggle Buttons
+    document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = btn.previousElementSibling;
+        if (input && (input.type === 'password' || input.type === 'text')) {
+          const isPassword = input.type === 'password';
+          input.type = isPassword ? 'text' : 'password';
+          btn.textContent = isPassword ? '🙈' : '👁️';
+        }
+      });
+    });
+
+    // Auth Forms Submit
+    document.getElementById('authLoginForm')?.addEventListener('submit', (e) => this.handleLogin(e));
+    document.getElementById('authSignupForm')?.addEventListener('submit', (e) => this.handleSignup(e));
+    document.getElementById('continueWithGoogleBtn')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const googleBtn = document.getElementById('continueWithGoogleBtn');
+      const origHtml = googleBtn ? googleBtn.innerHTML : '';
+      try {
+        if (googleBtn) {
+          googleBtn.disabled = true;
+          googleBtn.innerHTML = '<span>Connecting to Google...</span>';
+        }
+
+        const currentMode = this.authModalMode || (document.getElementById('authSignupView')?.style.display !== 'none' ? 'signup' : 'login');
+        const signupEmail = document.getElementById('signupGmailInput')?.value?.trim();
+        const signupName = document.getElementById('signupNameInput')?.value?.trim();
+        const loginEmail = document.getElementById('loginGmailInput')?.value?.trim();
+
+        // If user already typed their email in signup form, sign up directly via Google
+        if (currentMode === 'signup' && signupEmail && authService.validateEmail(signupEmail)) {
+          await handleQuickGoogleSignIn(signupEmail, signupName || signupEmail.split('@')[0]);
+          return;
+        }
+
+        // If user already typed their email in login form, sign in directly via Google
+        if (currentMode === 'login' && loginEmail && authService.validateEmail(loginEmail)) {
+          await handleQuickGoogleSignIn(loginEmail, loginEmail.split('@')[0]);
+          return;
+        }
+
+        const action = await authService.triggerGoogleLogin();
+        if (action === 'open_selector') {
+          this.configureGoogleAccountModal(currentMode, signupEmail || loginEmail, signupName);
+          closeModal('authModal');
+          openModal('googleAccountModal');
+        }
+      } catch (err) {
+        showToast(err.message || 'Google authentication failed.', 'error');
+      } finally {
+        if (googleBtn) {
+          googleBtn.disabled = false;
+          googleBtn.innerHTML = origHtml;
+        }
+      }
+    });
+
+    // Quick Google Account Selection
+    const handleQuickGoogleSignIn = async (email, name) => {
+      try {
+        showToast(`Connecting with Google (${email})...`, 'info');
+        await authService.loginWithGooglePayload({ email, name });
+        showToast(`Welcome to Hisaabo, ${name}!`, 'success');
+        closeModal('googleAccountModal');
+        closeModal('authModal');
+        this.renderUserHeader();
+        window.location.hash = '#dashboard';
+        this.handleRouting();
+        if (typeof this.renderCurrentView === 'function') {
+          this.renderCurrentView();
+        }
+      } catch (err) {
+        const errEl = document.getElementById('googleAuthError');
+        if (errEl) {
+          errEl.textContent = err.message || 'Google sign in failed.';
+          errEl.style.display = 'block';
+        }
+        showToast(err.message || 'Google sign in failed.', 'error');
+      }
+    };
+
+    document.getElementById('googleQuickAccountBtn1')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleQuickGoogleSignIn('dishusony@gmail.com', 'Disha Sony');
+    });
+
+    document.getElementById('googleQuickAccountBtn2')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleQuickGoogleSignIn('student.user@gmail.com', 'Student Learner');
+    });
+
+    document.getElementById('googleCustomAccountForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const emailInput = document.getElementById('googleCustomEmailInput');
+      const nameInput = document.getElementById('googleCustomNameInput');
+      const email = emailInput?.value || '';
+      const name = nameInput?.value || email.split('@')[0];
+      if (!email) {
+        showToast('Please enter your Google / Gmail address.', 'error');
+        return;
+      }
+      await handleQuickGoogleSignIn(email, name);
+    });
+
+    // Sidebar & Mobile Navigation
+    document.getElementById('mobileMenuBtn')?.addEventListener('click', () => this.openMobileSidebar());
+    document.getElementById('sidebarCloseBtn')?.addEventListener('click', () => this.closeMobileSidebar());
+    document.getElementById('sidebarBackdrop')?.addEventListener('click', () => this.closeMobileSidebar());
+    document.getElementById('sidebarLogoutBtn')?.addEventListener('click', () => this.handleLogout());
+
+    // Month Selector Buttons
+    document.getElementById('prevMonthBtn')?.addEventListener('click', () => this.changeMonth(-1));
+    document.getElementById('nextMonthBtn')?.addEventListener('click', () => this.changeMonth(1));
+    document.getElementById('currentMonthBtn')?.addEventListener('click', () => {
+      store.resetToCurrentMonth();
+      this.renderCurrentView();
+    });
+    document.getElementById('monthSelect')?.addEventListener('change', (e) => {
+      store.setSelectedMonth(e.target.value);
+      this.renderCurrentView();
+    });
+
+    // Global Search
+    const searchInput = document.getElementById('globalSearchInput');
+    const clearSearch = document.getElementById('clearGlobalSearchBtn');
+    searchInput?.addEventListener('input', (e) => {
+      const q = e.target.value;
+      if (clearSearch) clearSearch.style.display = q ? 'block' : 'none';
+      this.txFilters.searchQuery = q;
+      if (this.currentRoute === 'transactions') {
+        renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+      }
+    });
+    clearSearch?.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      clearSearch.style.display = 'none';
+      this.txFilters.searchQuery = '';
+      if (this.currentRoute === 'transactions') {
+        renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+      }
+    });
+
+    // Spending Chart Period Toggles (Weekly / Monthly / Yearly)
+    document.querySelectorAll('.btn-period-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.btn-period-toggle').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.activeSpendingPeriod = btn.getAttribute('data-period') || 'monthly';
+        renderSpendingTrendChart('spendingTrendChart', store, this.activeSpendingPeriod);
+      });
+    });
+
+    // Quick Add Expense triggers
+    const openAddExpenseModal = () => {
+      this.editingExpenseId = null;
+      const titleEl = document.getElementById('expenseModalTitle');
+      if (titleEl) titleEl.textContent = 'Add New Expense';
+      const form = document.getElementById('modalExpenseForm');
+      if (form) form.reset();
+      const dateInput = document.getElementById('modalExpDate');
+      if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+      this.renderPills('modalCategoryPills', 'modalPaymentPills', 'modalExpCategoryHidden', 'modalExpPaymentHidden');
+      openModal('expenseModal');
+    };
+    document.getElementById('topbarAddExpenseBtn')?.addEventListener('click', openAddExpenseModal);
+    document.querySelectorAll('.trigger-add-expense').forEach(btn => {
+      btn.addEventListener('click', openAddExpenseModal);
+    });
+
+    // Quick Add Income / Pocket Money triggers
+    document.querySelectorAll('.trigger-add-income').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.editingIncomeId = null;
+        const titleEl = document.getElementById('incomeModalTitle');
+        if (titleEl) titleEl.textContent = 'Add Budget / Pocket Money';
+        const form = document.getElementById('incomeForm');
+        if (form) form.reset();
+        const dateInput = document.getElementById('incomeDate') || document.getElementById('incomeDateInput');
+        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+        openModal('incomeModal');
+      });
+    });
+
+    // Budget trigger
+    const openBudgetModalHandler = () => {
+      const monthKey = store.getSelectedMonth();
+      const kpis = store.getMonthKPIs(monthKey);
+      const input = document.getElementById('overallBudgetLimitInput') || document.getElementById('budgetAmountInput');
+      if (input) input.value = kpis.budget;
+      const monthLabel = document.getElementById('budgetMonthLabel');
+      if (monthLabel && typeof formatMonthName === 'function') {
+        monthLabel.textContent = formatMonthName(monthKey);
+      }
+      openModal('budgetModal');
+      setTimeout(() => input?.focus(), 50);
+    };
+
+    document.getElementById('editBudgetTriggerBtn')?.addEventListener('click', openBudgetModalHandler);
+    document.getElementById('budgetOpenOverallModalBtn')?.addEventListener('click', openBudgetModalHandler);
+    document.querySelectorAll('.trigger-edit-budget, [data-open-modal="budgetModal"]').forEach(btn => {
+      btn.addEventListener('click', openBudgetModalHandler);
+    });
+
+    // Universal delegation for all budget edit triggers
+    document.addEventListener('click', (e) => {
+      const budgetBtn = e.target.closest('#budgetOpenOverallModalBtn, #editBudgetTriggerBtn, .trigger-edit-budget, [data-open-modal="budgetModal"]');
+      if (budgetBtn) {
+        e.preventDefault();
+        openBudgetModalHandler();
+      }
+      const mailBtn = e.target.closest('#configureMailBtn');
+      if (mailBtn) {
+        e.preventDefault();
+        openModal('mailConfigModal');
+      }
+    });
+
+    // Add Category Budget Trigger
+    document.querySelectorAll('.trigger-add-category-budget, #addCategoryBudgetBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const select = document.getElementById('catBudgetCategorySelect') || document.getElementById('catBudgetSelect');
+        if (select) {
+          const cats = store.getCategories ? store.getCategories() : CATEGORIES;
+          select.innerHTML = cats.map(c => {
+            const label = c.label || c.name || c.id;
+            return `<option value="${c.id}">${label}</option>`;
+          }).join('');
+        }
+        openModal('categoryBudgetModal');
+      });
+    });
+
+    // Add Custom Category Trigger
+    document.getElementById('openAddCategoryModalBtn')?.addEventListener('click', () => {
+      const form = document.getElementById('customCategoryForm');
+      if (form) form.reset();
+      openModal('customCategoryModal');
+    });
+
+    // Add Goal Trigger
+    document.getElementById('openAddGoalModalBtn')?.addEventListener('click', () => {
+      const form = document.getElementById('goalForm');
+      if (form) form.reset();
+      openModal('goalModal');
+    });
+
+    // Notification Bell Toggle
+    const notifBell = document.getElementById('notifBellBtn');
+    const notifDropdown = document.getElementById('notifDropdown');
+    notifBell?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (notifDropdown) {
+        notifDropdown.style.display = notifDropdown.style.display === 'none' ? 'block' : 'none';
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (notifDropdown && !notifDropdown.contains(e.target) && e.target !== notifBell) {
+        notifDropdown.style.display = 'none';
+      }
+    });
+
+    // Modal Close Buttons (supports .modal-close-btn, .modal-cancel-btn, [data-close-modal])
+    document.querySelectorAll('.modal-close-btn, .modal-cancel-btn, [data-close-modal]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetModalId = btn.getAttribute('data-close-modal');
+        if (targetModalId) {
+          closeModal(targetModalId);
+        } else {
+          const modal = btn.closest('.modal-backdrop') || btn.closest('.modal-backdrop-fintech');
+          if (modal && modal.id) closeModal(modal.id);
+        }
+      });
+    });
+
+    // Dismiss modal on backdrop background click (outside dialog content)
+    document.querySelectorAll('.modal-backdrop, .modal-backdrop-fintech').forEach(backdrop => {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop && backdrop.id) {
+          closeModal(backdrop.id);
+        }
+      });
+    });
+
+    // Dismiss modal on Escape key press
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const activeModal = document.querySelector('.modal-backdrop.active, .modal-backdrop-fintech.active, .modal-backdrop[style*="display: flex"]');
+        if (activeModal && activeModal.id) {
+          closeModal(activeModal.id);
+        }
+      }
+    });
+
+    // Clear Notifications Button
+    document.getElementById('clearNotifsBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const list = document.getElementById('notifList');
+      if (list) list.innerHTML = '<div class="notif-empty">No active notifications</div>';
+      const badge = document.getElementById('notifBadge');
+      if (badge) {
+        badge.textContent = '0';
+        badge.style.display = 'none';
+      }
+      showToast('Notifications cleared.', 'info');
+    });
+
+    // Offline Banner Retry Button
+    document.getElementById('networkRetryBtn')?.addEventListener('click', async () => {
+      showToast('Syncing offline data...', 'info');
+      try {
+        if (typeof store.syncOfflineQueue === 'function') {
+          await store.syncOfflineQueue();
+        }
+        const banner = document.getElementById('networkStatusBanner');
+        if (banner) banner.classList.add('hidden');
+        showToast('Sync complete!', 'success');
+      } catch (err) {
+        showToast('Sync failed: ' + (err.message || 'Still offline'), 'error');
+      }
+    });
+
+    // Cancel Add-Expense Page
+    document.getElementById('pageExpCancelBtn')?.addEventListener('click', () => {
+      window.location.hash = '#dashboard';
+    });
+
+    // Configure Gmail Alerts Modal Trigger
+    document.getElementById('configureMailBtn')?.addEventListener('click', () => {
+      openModal('mailConfigModal');
+    });
+
+    // Settings CSV & Demo Records Tools
+    document.getElementById('settingsExportCsvBtn')?.addEventListener('click', () => {
+      try {
+        const expenses = store.getAllExpenses();
+        if (!expenses || expenses.length === 0) {
+          showToast('No expense records available to export.', 'info');
+          return;
+        }
+        exportExpensesToCSV(expenses, `hisabo_expenses_${store.getSelectedMonth()}.csv`);
+        showToast('Expenses exported to CSV successfully.', 'success');
+      } catch (err) {
+        showToast('Export failed: ' + err.message, 'error');
+      }
+    });
+
+    document.getElementById('settingsImportCsvBtn')?.addEventListener('click', () => {
+      openModal('importModal');
+    });
+
+    document.getElementById('csvFileInput')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        showToast('Importing CSV records...', 'info');
+        const text = await file.text();
+        const parsed = parseCSV(text);
+        if (!parsed || parsed.length === 0) {
+          showToast('No valid expense records found in CSV.', 'error');
+          return;
+        }
+
+        let imported = 0;
+        for (const exp of parsed) {
+          try {
+            await store.addExpense(exp);
+            imported++;
+          } catch (itemErr) {
+            console.warn('[CSV Import] Skipped invalid row:', itemErr);
+          }
+        }
+        showToast(`Imported ${imported} expenses successfully!`, 'success');
+        closeModal('importModal');
+        e.target.value = '';
+        this.renderCurrentView();
+      } catch (err) {
+        showToast('Import failed: ' + (err.message || 'Invalid CSV format.'), 'error');
+      }
+    });
+
+    document.getElementById('settingsReloadDemoBtn')?.addEventListener('click', () => {
+      this.confirmDeletion('Load sample demo records into your tracker?', async () => {
+        try {
+          await store.loadDemoData();
+          showToast('Demo records loaded successfully!', 'success');
+          this.renderCurrentView();
+        } catch (err) {
+          showToast('Failed to load demo records: ' + err.message, 'error');
+        }
+      });
+    });
+
+    // Settings Theme Choice Buttons
+    document.querySelectorAll('.theme-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-set-theme');
+        if (t) {
+          this.setTheme(t);
+          document.querySelectorAll('.theme-choice-btn').forEach(b => b.classList.toggle('active', b === btn));
+          showToast(`Theme updated to ${btn.textContent.trim()}.`, 'info');
+        }
+      });
+    });
+
+    // Settings Currency Select
+    document.getElementById('settingsCurrencySelect')?.addEventListener('change', async (e) => {
+      const currency = e.target.value;
+      try {
+        await api.updateSettings({ currency });
+        showToast(`Currency format updated to ${currency}.`, 'success');
+      } catch (err) {
+        showToast('Failed to update currency: ' + err.message, 'error');
+      }
+    });
+
+    // Custom Category Color Swatches
+    document.querySelectorAll('#customCatColorSwatches .color-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        document.querySelectorAll('#customCatColorSwatches .color-swatch').forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+        const hidden = document.getElementById('customCatColorHidden');
+        if (hidden) hidden.value = swatch.getAttribute('data-color') || '#00f0ff';
+      });
+    });
+
+    // Form Submissions
+    this.initFormHandlers();
+
+    // Transactions Table Filter Buttons
+    document.querySelectorAll('.tx-type-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tx-type-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.txFilters.typeFilter = btn.getAttribute('data-type-filter') || 'all';
+        this.txFilters.currentPage = 1;
+        renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+      });
+    });
+
+    document.getElementById('txFilterCategory')?.addEventListener('change', (e) => {
+      this.txFilters.categoryFilter = e.target.value;
+      this.txFilters.currentPage = 1;
+      renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+    });
+
+    document.getElementById('txFilterPayment')?.addEventListener('change', (e) => {
+      this.txFilters.paymentFilter = e.target.value;
+      this.txFilters.currentPage = 1;
+      renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+    });
+
+    document.getElementById('txSortSelect')?.addEventListener('change', (e) => {
+      this.txFilters.sortOption = e.target.value;
+      this.txFilters.currentPage = 1;
+      renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+    });
+
+    // Transaction Pagination Controls
+    document.getElementById('txPrevPageBtn')?.addEventListener('click', () => {
+      if (this.txFilters.currentPage > 1) {
+        this.txFilters.currentPage--;
+        renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+      }
+    });
+
+    document.getElementById('txNextPageBtn')?.addEventListener('click', () => {
+      this.txFilters.currentPage++;
+      renderTransactionsTable({ ...this.txFilters, monthKey: store.getSelectedMonth() });
+    });
+
+    // Calendar Day Click Handler (Supports #calendarDaysGrid and #calendarGrid)
+    const handleCalendarClick = (e) => {
+      const cell = e.target.closest('.calendar-day-cell');
+      if (cell && cell.dataset.date) {
+        document.querySelectorAll('.calendar-day-cell').forEach(c => c.classList.remove('selected'));
+        cell.classList.add('selected');
+        renderCalendarSelectedDay(cell.dataset.date);
+      }
+    };
+    document.getElementById('calendarDaysGrid')?.addEventListener('click', handleCalendarClick);
+    document.getElementById('calendarGrid')?.addEventListener('click', handleCalendarClick);
   }
 
-  async handleExpenseSubmit(e) {
-    e.preventDefault();
-    const form = e.target;
-    const date = (form.expenseDate && form.expenseDate.value) ? form.expenseDate.value : new Date().toISOString().split('T')[0];
-    const item = form.expenseItem.value.trim();
-    const amount = parseFloat(form.expenseAmount.value);
-    const category = form.expenseCategory.value || 'Food';
-    const paymentMethod = form.expensePayment.value || 'UPI';
-    const notes = form.expenseNotes.value.trim();
+  /* --------------------------------------------------------------------------
+     FORM SUBMISSIONS (Expense, Income, Budgets, Goals, etc.)
+     -------------------------------------------------------------------------- */
+  initFormHandlers() {
+    // 1. Modal Expense Form
+    const handleModalExpenseSubmit = async (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const amountInput = document.getElementById('modalExpAmount');
+      const itemInput = document.getElementById('modalExpItem');
+      const dateInput = document.getElementById('modalExpDate');
 
-    if (isNaN(amount) || amount <= 0) {
-      showToast('Please enter a valid positive amount in ₹', 'error');
-      return;
-    }
+      const amount = parseFloat(amountInput?.value) || 0;
+      const title = itemInput?.value?.trim() || '';
+      const date = dateInput?.value || new Date().toISOString().split('T')[0];
+      const category = document.getElementById('modalExpCategoryHidden')?.value || 'Food';
+      const paymentMethod = document.getElementById('modalExpPaymentHidden')?.value || 'UPI';
+      const notes = document.getElementById('modalExpNotes')?.value?.trim() || '';
 
-    if (!item) {
-      showToast('Please enter what you purchased', 'error');
-      return;
-    }
+      if (amount <= 0) {
+        showToast('Please enter a valid expense amount greater than 0.', 'error');
+        amountInput?.focus();
+        return;
+      }
+      if (!title) {
+        showToast('Please enter what you bought (item description).', 'error');
+        itemInput?.focus();
+        return;
+      }
 
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const origBtnText = submitBtn ? submitBtn.innerHTML : '';
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = 'Saving...';
-    }
+      try {
+        const payload = {
+          item: title,
+          title,
+          amount,
+          date,
+          category,
+          paymentMethod,
+          notes
+        };
 
-    try {
-      let targetId = this.currentEditingId;
-      if (this.currentEditingId) {
-        await store.updateExpense(this.currentEditingId, { date, item, amount, category, paymentMethod, notes });
-        showToast(`Updated "${item}" (${formatCurrency(amount)})`);
+        if (this.editingExpenseId) {
+          await store.updateExpense(this.editingExpenseId, payload);
+          showToast('Expense updated successfully.', 'success');
+        } else {
+          await store.addExpense(payload);
+          showToast('Expense added successfully.', 'success');
+        }
+        closeModal('expenseModal');
+        try {
+          this.renderCurrentView();
+        } catch (renderErr) {
+          console.warn('[Hisaabo] View render warning:', renderErr);
+        }
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    };
+
+    const modalExpForm = document.getElementById('modalExpenseForm');
+    modalExpForm?.addEventListener('submit', handleModalExpenseSubmit);
+    document.getElementById('saveExpenseModalBtn')?.addEventListener('click', (e) => {
+      if (modalExpForm && !modalExpForm.checkValidity()) {
+        modalExpForm.reportValidity();
+      }
+    });
+
+    // 2. Dedicated Page Expense Form
+    document.getElementById('pageExpenseForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const amountInput = document.getElementById('pageExpAmount');
+      const itemInput = document.getElementById('pageExpItem');
+      const dateInput = document.getElementById('pageExpDate');
+
+      const amount = parseFloat(amountInput?.value) || 0;
+      const title = itemInput?.value?.trim() || '';
+      const date = dateInput?.value || new Date().toISOString().split('T')[0];
+      const category = document.getElementById('pageExpCategoryHidden')?.value || 'Food';
+      const paymentMethod = document.getElementById('pageExpPaymentHidden')?.value || 'UPI';
+      const notes = document.getElementById('pageExpNotes')?.value?.trim() || '';
+
+      if (amount <= 0) {
+        showToast('Please enter a valid expense amount.', 'error');
+        amountInput?.focus();
+        return;
+      }
+      if (!title) {
+        showToast('Please enter what you bought.', 'error');
+        itemInput?.focus();
+        return;
+      }
+
+      try {
+        const payload = {
+          item: title,
+          title,
+          amount,
+          date,
+          category,
+          paymentMethod,
+          notes
+        };
+        await store.addExpense(payload);
+        showToast('Expense added successfully.', 'success');
+        document.getElementById('pageExpenseForm').reset();
+        window.location.hash = '#dashboard';
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    document.getElementById('pageExpSubmitBtn')?.addEventListener('click', () => {
+      const form = document.getElementById('pageExpenseForm');
+      if (form && !form.checkValidity()) form.reportValidity();
+    });
+
+    // 3. Income / Budget Form
+    document.getElementById('incomeForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const source = (document.getElementById('incomeSource') || document.getElementById('incomeSourceInput'))?.value?.trim();
+      const amount = parseFloat((document.getElementById('incomeAmount') || document.getElementById('incomeAmountInput'))?.value) || 0;
+      const date = (document.getElementById('incomeDate') || document.getElementById('incomeDateInput'))?.value;
+      const paymentMethod = (document.getElementById('incomePayment') || document.getElementById('incomePaymentSelect'))?.value || 'UPI';
+      const notes = (document.getElementById('incomeNotes') || document.getElementById('incomeNotesInput'))?.value?.trim() || '';
+
+      if (amount <= 0 || !source || !date) {
+        showToast('Please enter source, amount, and date.', 'error');
+        return;
+      }
+
+      try {
+        if (this.editingIncomeId) {
+          await store.updateIncome(this.editingIncomeId, { source, amount, date, paymentMethod, notes });
+          showToast('Budget / Pocket money updated successfully.', 'success');
+        } else {
+          await store.addIncome({ source, amount, date, paymentMethod, notes });
+          showToast('Budget / Pocket money saved successfully.', 'success');
+        }
+        closeModal('incomeModal');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    document.getElementById('saveIncomeBtn')?.addEventListener('click', () => {
+      const form = document.getElementById('incomeForm');
+      if (form && !form.checkValidity()) form.reportValidity();
+    });
+
+    // 4. Monthly Overall Budget Form
+    const handleBudgetSubmit = async (e) => {
+      if (e) e.preventDefault();
+      const input = document.getElementById('overallBudgetLimitInput') || document.getElementById('budgetAmountInput');
+      const limit = parseFloat(input?.value) || 0;
+      if (limit <= 0) {
+        showToast('Enter a budget limit greater than 0.', 'error');
+        input?.focus();
+        return;
+      }
+      try {
+        const monthKey = store.getSelectedMonth();
+        if (typeof store.setBudget === 'function') {
+          await store.setBudget(monthKey, limit);
+        } else if (typeof store.setMonthlyBudget === 'function') {
+          await store.setMonthlyBudget(monthKey, limit);
+        }
+        showToast('Monthly budget updated.', 'success');
+        closeModal('budgetModal');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    };
+
+    document.getElementById('budgetForm')?.addEventListener('submit', handleBudgetSubmit);
+    document.getElementById('saveMonthlyBudgetBtn')?.addEventListener('click', (e) => {
+      const form = document.getElementById('budgetForm');
+      if (form && !form.checkValidity()) {
+        form.reportValidity();
       } else {
-        const added = await store.addExpense({ date, item, amount, category, paymentMethod, notes });
-        targetId = added?.id;
-        showToast(`Saved "${item}" for ${formatCurrency(amount)}`);
+        handleBudgetSubmit(e);
+      }
+    });
 
-        // If expense was added to another month, switch to it
-        const expMonth = date.substring(0, 7);
-        if (expMonth !== store.getSelectedMonth()) {
-          store.setSelectedMonth(expMonth);
+    // 5. Category Budget Form
+    document.getElementById('categoryBudgetForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const categoryId = (document.getElementById('catBudgetCategorySelect') || document.getElementById('catBudgetSelect'))?.value;
+      const limit = parseFloat((document.getElementById('catBudgetLimitInput') || document.getElementById('catBudgetAmount'))?.value) || 0;
+      if (!categoryId || limit <= 0) {
+        showToast('Select category and limit amount.', 'error');
+        return;
+      }
+      try {
+        const monthKey = store.getSelectedMonth();
+        await store.setCategoryBudget(monthKey, categoryId, limit);
+        showToast('Category budget saved.', 'success');
+        closeModal('categoryBudgetModal');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // 6. Custom Category Form
+    document.getElementById('customCategoryForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const label = (document.getElementById('customCatName') || document.getElementById('catNameInput'))?.value?.trim();
+      const color = (document.getElementById('customCatColorHidden') || document.getElementById('catColorInput'))?.value || '#00f0ff';
+      const icon = (document.getElementById('customCatIcon') || document.getElementById('catIconInput'))?.value || 'more-horizontal';
+
+      if (!label) {
+        showToast('Category name is required.', 'error');
+        return;
+      }
+      try {
+        await store.createCategory({ label, color, icon });
+        showToast(`Category "${label}" created.`, 'success');
+        closeModal('customCategoryModal');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // 7. Goals Form
+    document.getElementById('goalForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('goalNameInput')?.value?.trim();
+      const targetAmount = parseFloat((document.getElementById('goalTargetInput') || document.getElementById('goalTargetAmountInput'))?.value) || 0;
+      const currentAmount = parseFloat(document.getElementById('goalCurrentInput')?.value) || 0;
+      const deadline = document.getElementById('goalDeadlineInput')?.value || null;
+
+      if (!name || targetAmount <= 0) {
+        showToast('Provide goal name and target amount.', 'error');
+        return;
+      }
+      try {
+        await store.createGoal({ name, targetAmount, currentAmount, deadline });
+        showToast(`Goal "${name}" created!`, 'success');
+        closeModal('goalModal');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // 8. Add Funds to Goal Form
+    document.getElementById('addGoalFundsForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const goalId = document.getElementById('addFundsGoalId')?.value || document.getElementById('goalFundsGoalId')?.value || this.activeGoalId;
+      const amount = parseFloat((document.getElementById('addFundsAmountInput') || document.getElementById('goalFundsAmountInput'))?.value) || 0;
+      if (!goalId || amount <= 0) {
+        showToast('Enter valid contribution amount.', 'error');
+        return;
+      }
+      try {
+        await store.addGoalFunds(goalId, amount);
+        showToast('Contribution added to goal!', 'success');
+        closeModal('addGoalFundsModal');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // 9. Profile Edit Form
+    document.getElementById('profileEditForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = (document.getElementById('profileNameInput') || document.getElementById('profileFullNameInput'))?.value?.trim();
+      const phone = document.getElementById('profilePhoneInput')?.value?.trim();
+      try {
+        await store.updateProfile({ name, phone });
+        showToast('Profile updated.', 'success');
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // 10. Settings Password Form
+    document.getElementById('settingsPasswordForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newPassword = (document.getElementById('settingsNewPassword') || document.getElementById('newPasswordInput'))?.value;
+      const confirmPassword = (document.getElementById('settingsConfirmPassword') || document.getElementById('confirmNewPasswordInput'))?.value;
+
+      const user = authService.getCurrentUser();
+      if (!user || !user.email) {
+        showToast('Please sign in to update your password.', 'error');
+        return;
+      }
+      if (!newPassword || newPassword.length < 6) {
+        showToast('Password must be at least 6 characters long.', 'error');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        showToast('New passwords do not match.', 'error');
+        return;
+      }
+      try {
+        await api.request('/api/auth/reset-password', {
+          method: 'POST',
+          body: { email: user.email, newPassword, confirmPassword }
+        });
+        showToast('Password updated successfully.', 'success');
+        document.getElementById('settingsPasswordForm').reset();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // 11. Gmail Alert Configuration Form
+    document.getElementById('mailConfigForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const gmailUser = document.getElementById('cfgSenderEmail')?.value?.trim();
+      const gmailAppPassword = document.getElementById('cfgAppPassword')?.value?.trim();
+      if (!gmailUser || !gmailAppPassword) {
+        showToast('Please provide both sender Gmail and 16-character App Password.', 'error');
+        return;
+      }
+      try {
+        showToast('Verifying Gmail SMTP configuration...', 'info');
+        const res = await api.request('/api/budgets/configure-mail', {
+          method: 'POST',
+          body: { gmailUser, gmailAppPassword, sendTestNow: true }
+        });
+        showToast(res.message || 'Gmail SMTP configured and verified!', 'success');
+        closeModal('mailConfigModal');
+        if (this.currentRoute === 'budget') {
+          renderBudgetView(store.getSelectedMonth());
+        }
+      } catch (err) {
+        showToast(err.message || 'Failed to configure Gmail SMTP.', 'error');
+      }
+    });
+
+    // 12. Theme & Currency Change
+    document.getElementById('themeSelect')?.addEventListener('change', (e) => {
+      this.setTheme(e.target.value);
+    });
+
+    // 12. Deletion Confirmation Handler
+    document.getElementById('confirmDeleteActionBtn')?.addEventListener('click', async () => {
+      if (!this.pendingDeleteAction) return;
+      try {
+        await this.pendingDeleteAction();
+        closeModal('deleteConfirmModal');
+        this.pendingDeleteAction = null;
+        this.renderCurrentView();
+      } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+      }
+    });
+
+    // Table / List Action Delegation
+    document.addEventListener('click', async (e) => {
+      const editTxBtn = e.target.closest('.btn-edit-tx');
+      const deleteTxBtn = e.target.closest('.btn-delete-tx');
+      const deleteIncomeBtn = e.target.closest('.btn-delete-income');
+      const deleteCatBtn = e.target.closest('.btn-delete-category');
+      const deleteCatBudgetBtn = e.target.closest('.btn-delete-category-budget');
+      const addFundsBtn = e.target.closest('.btn-add-funds');
+      const deleteGoalBtn = e.target.closest('.btn-delete-goal');
+
+      if (editTxBtn) {
+        const id = editTxBtn.dataset.id;
+        const type = editTxBtn.dataset.type;
+        if (type === 'expense') {
+          const exp = store.getAllExpenses().find(x => x.id === id);
+          if (exp) {
+            this.editingExpenseId = id;
+            document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
+            document.getElementById('modalExpAmount').value = exp.amount;
+            document.getElementById('modalExpItem').value = exp.title || '';
+            document.getElementById('modalExpDate').value = exp.date || '';
+            document.getElementById('modalExpCategoryHidden').value = exp.category || 'Others';
+            document.getElementById('modalExpPaymentHidden').value = exp.paymentMethod || 'UPI';
+            document.getElementById('modalExpNotes').value = exp.notes || '';
+            this.renderPills('modalCategoryPills', 'modalPaymentPills', 'modalExpCategoryHidden', 'modalExpPaymentHidden');
+            openModal('expenseModal');
+          }
         }
       }
 
-      closeModal('expenseModal');
-      this.switchTab('expenses'); // Ensure user is on expenses view
-      this.render();
-      if (targetId) {
-        highlightNewRow(targetId);
+      if (deleteTxBtn) {
+        const id = deleteTxBtn.dataset.id;
+        const type = deleteTxBtn.dataset.type;
+        this.confirmDeletion(`Delete this ${type}? This action cannot be undone.`, async () => {
+          if (type === 'expense') await store.deleteExpense(id);
+          else await store.deleteIncome(id);
+          showToast(`${type} removed.`, 'success');
+        });
       }
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = origBtnText;
+
+      if (deleteIncomeBtn) {
+        const id = deleteIncomeBtn.dataset.id;
+        this.confirmDeletion('Delete this income record?', async () => {
+          await store.deleteIncome(id);
+          showToast('Income removed.', 'success');
+        });
+      }
+
+      if (deleteCatBtn) {
+        const id = deleteCatBtn.dataset.id;
+        this.confirmDeletion('Delete this custom category?', async () => {
+          await store.deleteCategory(id);
+          showToast('Category removed.', 'success');
+        });
+      }
+
+      if (deleteCatBudgetBtn) {
+        const categoryId = deleteCatBudgetBtn.dataset.category;
+        const monthKey = store.getSelectedMonth();
+        this.confirmDeletion('Remove budget limit for this category?', async () => {
+          await store.deleteCategoryBudget(monthKey, categoryId);
+          showToast('Category budget removed.', 'success');
+        });
+      }
+
+      if (addFundsBtn) {
+        const goalId = addFundsBtn.dataset.id;
+        this.activeGoalId = goalId;
+        const goal = (store.getGoals ? store.getGoals() : []).find(g => g.id === goalId);
+        const nameEl = document.getElementById('addFundsGoalName');
+        if (nameEl && goal) nameEl.textContent = `Goal: ${goal.name}`;
+        const idInput = document.getElementById('addFundsGoalId') || document.getElementById('goalFundsGoalId');
+        if (idInput) idInput.value = goalId;
+        const amtInput = document.getElementById('addFundsAmountInput') || document.getElementById('goalFundsAmountInput');
+        if (amtInput) amtInput.value = '';
+        openModal('addGoalFundsModal');
+      }
+
+      if (deleteGoalBtn) {
+        const id = deleteGoalBtn.dataset.id;
+        this.confirmDeletion('Delete this financial goal?', async () => {
+          await store.deleteGoal(id);
+          showToast('Goal removed.', 'success');
+        });
+      }
+    });
+
+    // Forgot Password Form Submit
+    document.getElementById('forgotPasswordForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('forgotEmailInput')?.value?.trim();
+      const newPassword = document.getElementById('forgotNewPasswordInput')?.value;
+      const confirm = document.getElementById('forgotConfirmPasswordInput')?.value;
+      const errBox = document.getElementById('forgotPasswordError');
+      const succBox = document.getElementById('forgotPasswordSuccess');
+      if (errBox) errBox.style.display = 'none';
+      if (succBox) succBox.style.display = 'none';
+
+      if (!email || !newPassword) {
+        showToast('Please fill all required fields.', 'error');
+        return;
+      }
+      if (newPassword !== confirm) {
+        if (errBox) {
+          errBox.textContent = 'Passwords do not match.';
+          errBox.style.display = 'block';
+        } else {
+          showToast('Passwords do not match.', 'error');
+        }
+        return;
+      }
+      try {
+        await api.request('/api/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ email, newPassword })
+        });
+        showToast('Password updated! Please sign in with your new password.', 'success');
+        closeModal('forgotPasswordModal');
+        this.setAuthModalMode('login');
+        openModal('authModal');
+      } catch (err) {
+        if (errBox) {
+          errBox.textContent = err.message || 'Password reset failed.';
+          errBox.style.display = 'block';
+        } else {
+          showToast(err.message || 'Password reset failed.', 'error');
+        }
+      }
+    });
+
+    // Delete Account Trigger
+    document.getElementById('deleteAccountTriggerBtn')?.addEventListener('click', () => {
+      this.confirmDeletion('Are you absolutely sure you want to permanently delete your account and all associated financial records? This action cannot be recovered.', async () => {
+        await api.deleteAccount();
+        authService.logout();
+        showToast('Account deleted permanently.', 'info');
+      });
+    });
+  }
+
+  confirmDeletion(message, action, details = {}) {
+    const msgEl = document.getElementById('deleteConfirmMessage');
+    if (msgEl) msgEl.textContent = message;
+    const titleEl = document.getElementById('deleteItemTitle');
+    if (titleEl) titleEl.textContent = details.title || message;
+    const amtEl = document.getElementById('deleteItemAmount');
+    if (amtEl) {
+      if (details.amount) {
+        amtEl.textContent = formatCurrency(details.amount);
+        amtEl.style.display = 'block';
+      } else {
+        amtEl.style.display = 'none';
       }
     }
-  }
-
-  openBudgetModal() {
-    const currentMonth = store.getSelectedMonth();
-    const currentBudget = store.getBudget(currentMonth);
-    document.getElementById('budgetMonthLabel').textContent = formatMonthName(currentMonth);
-    document.getElementById('budgetAmountInput').value = currentBudget;
-    openModal('budgetModal');
-    setTimeout(() => document.getElementById('budgetAmountInput')?.focus(), 150);
-  }
-
-  async handleBudgetSubmit(e) {
-    e.preventDefault();
-    const input = document.getElementById('budgetAmountInput');
-    const val = parseFloat(input.value);
-
-    if (isNaN(val) || val < 0) {
-      showToast('Please enter a valid positive budget amount', 'error');
-      return;
-    }
-
-    const currentMonth = store.getSelectedMonth();
-    await store.setBudget(currentMonth, val);
-    closeModal('budgetModal');
-    showToast(`Monthly budget updated to ${formatCurrency(val)}`);
-    this.render();
-  }
-
-  async handleDuplicate(id) {
-    try {
-      const copy = await store.duplicateExpense(id);
-      showToast(`Duplicated "${copy.item}" with today's date`);
-      this.render();
-      if (copy?.id) {
-        highlightNewRow(copy.id);
-      }
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  handleDeleteRequest(id) {
-    const exp = store.getExpenseById(id);
-    if (!exp) return;
-
-    this.currentDeleteId = id;
-    document.getElementById('deleteItemName').textContent = exp.item;
-    document.getElementById('deleteItemAmount').textContent = formatCurrency(exp.amount);
+    this.pendingDeleteAction = action;
     openModal('deleteConfirmModal');
   }
 
-  handleConfirmDelete() {
-    if (!this.currentDeleteId) return;
-    const deleteId = this.currentDeleteId;
-    closeModal('deleteConfirmModal');
-    animateRowDeletion(deleteId, async () => {
-      const removed = await store.deleteExpense(deleteId);
-      if (removed) {
-        showToast('Expense deleted successfully');
-        this.render();
-      }
-    });
-    this.currentDeleteId = null;
-  }
+  /* --------------------------------------------------------------------------
+     AUTHENTICATION ACTIONS (Sign In / Sign Up / Logout)
+     -------------------------------------------------------------------------- */
+  async handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('loginGmailInput')?.value?.trim();
+    const password = document.getElementById('loginPasswordInput')?.value;
+    const submitBtn = document.getElementById('loginSubmitBtn');
+    const origHtml = submitBtn ? submitBtn.innerHTML : 'Sign In';
 
-  getFilteredExpenses() {
-    const list = store.getExpensesForMonth(store.getSelectedMonth());
-
-    return list.filter(exp => {
-      // Search match
-      if (this.searchQuery) {
-        const itemMatch = exp.item.toLowerCase().includes(this.searchQuery);
-        const notesMatch = (exp.notes || '').toLowerCase().includes(this.searchQuery);
-        if (!itemMatch && !notesMatch) return false;
-      }
-
-      // Category filter chip
-      if (this.categoryFilter !== 'All' && exp.category !== this.categoryFilter) {
-        return false;
-      }
-
-      return true;
-    }).sort((a, b) => {
-      switch (this.sortOption) {
-        case 'date-asc':
-          return a.date.localeCompare(b.date) || a.createdAt - b.createdAt;
-        case 'date-desc':
-          return b.date.localeCompare(a.date) || b.createdAt - a.createdAt;
-        case 'amount-asc':
-          return a.amount - b.amount;
-        case 'amount-desc':
-          return b.amount - a.amount;
-        default:
-          return b.date.localeCompare(a.date);
-      }
-    });
-  }
-
-  renderTableAndSummary() {
-    const filtered = this.getFilteredExpenses();
-    renderExpenseTable(
-      filtered,
-      (id) => this.openEditExpenseModal(id),
-      (id) => this.handleDuplicate(id),
-      (id) => this.handleDeleteRequest(id)
-    );
-  }
-
-  handleExportCSV() {
-    const currentMonth = store.getSelectedMonth();
-    const list = store.getExpensesForMonth(currentMonth);
-
-    if (list.length === 0) {
-      showToast('No expenses found for this month to export', 'error');
+    if (!email || !password) {
+      showToast('Enter your email and password.', 'error');
       return;
     }
 
     try {
-      const filename = `expenses_${currentMonth}.csv`;
-      exportExpensesToCSV(list, filename);
-      showToast(`Exported ${list.length} expenses to ${filename}`);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  handleCSVFileSelected(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target.result;
-        const result = parseCSV(text);
-
-        if (result.errors.length > 0) {
-          const previewErrors = result.errors.slice(0, 3).join(', ');
-          showToast(`Import warnings: ${previewErrors}`, 'error');
-        }
-
-        if (result.validExpenses.length > 0) {
-          (async () => {
-            for (const exp of result.validExpenses) {
-              await store.addExpense(exp);
-            }
-            showToast(`Successfully imported ${result.validExpenses.length} expense${result.validExpenses.length === 1 ? '' : 's'}!`);
-            closeModal('importModal');
-            this.switchTab('expenses');
-            this.render();
-          })();
-        } else {
-          showToast('No valid expenses found in CSV file', 'error');
-        }
-      } catch (err) {
-        showToast(`Failed to parse CSV: ${err.message}`, 'error');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>Signing in...</span>';
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+      await authService.login(email, password);
+      showToast('Welcome back to Hisaabo!', 'success');
+      closeModal('authModal');
+      this.renderUserHeader();
+      window.location.hash = '#dashboard';
+      this.handleRouting();
+    } catch (err) {
+      showToast(err.message || 'Invalid email or password.', 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
+      }
+    }
   }
 
-  render() {
-    this.updateMonthSelectorUI();
-    const kpis = store.getMonthKPIs(store.getSelectedMonth());
-    updateDashboardKPIs(kpis);
-    updateAuthUI(authService.getCurrentUser(), store);
-    this.renderTableAndSummary();
-    if (this.activeTab === 'analytics') {
-      refreshAllCharts(store);
+  async handleSignup(e) {
+    e.preventDefault();
+    const name = document.getElementById('signupNameInput')?.value?.trim();
+    const emailInput = document.getElementById('signupGmailInput') || document.getElementById('signupEmailInput');
+    const email = emailInput?.value?.trim();
+    const password = document.getElementById('signupPasswordInput')?.value;
+    const confirm = document.getElementById('signupConfirmPasswordInput')?.value;
+    const submitBtn = document.getElementById('signupSubmitBtn');
+    const origHtml = submitBtn ? submitBtn.innerHTML : 'Create Account';
+
+    if (!name || !email || !password) {
+      showToast('Please fill all required fields.', 'error');
+      return;
     }
+    if (confirm && password !== confirm) {
+      showToast('Passwords do not match.', 'error');
+      return;
+    }
+    if (password.length < 6) {
+      showToast('Password must be at least 6 characters long.', 'error');
+      return;
+    }
+
+    try {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>Creating account...</span>';
+      }
+      await authService.signup({ name, email, password, confirmPassword: confirm });
+      showToast('Account created successfully! Welcome to Hisaabo.', 'success');
+      const loginEmailInput = document.getElementById('loginGmailInput');
+      if (loginEmailInput) loginEmailInput.value = email;
+      closeModal('authModal');
+      this.renderUserHeader();
+      window.location.hash = '#dashboard';
+      this.handleRouting();
+    } catch (err) {
+      const errMsg = err.message || 'Registration failed. Please try again.';
+      if (errMsg.toLowerCase().includes('already') || errMsg.toLowerCase().includes('exists') || errMsg.toLowerCase().includes('duplicate')) {
+        showToast('Account already exists with this email. Switched to Sign In.', 'info');
+        const loginEmailInput = document.getElementById('loginGmailInput');
+        if (loginEmailInput) loginEmailInput.value = email;
+        this.setAuthModalMode('login');
+      } else {
+        showToast(errMsg, 'error');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
+      }
+    }
+  }
+
+  async handleLogout() {
+    await authService.logout();
+    showToast('Signed out of Hisaabo.', 'info');
+    window.location.hash = '#home';
+  }
+
+  /* --------------------------------------------------------------------------
+     DRAWER HELPERS
+     -------------------------------------------------------------------------- */
+  openMobileSidebar() {
+    document.getElementById('appSidebar')?.classList.add('open');
+    document.getElementById('sidebarBackdrop')?.classList.add('active');
+  }
+
+  closeMobileSidebar() {
+    document.getElementById('appSidebar')?.classList.remove('open');
+    document.getElementById('sidebarBackdrop')?.classList.remove('active');
   }
 }
 
-// Initialize on DOM Ready
+// Instantiate on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
-  window.app = new AppController();
+  window.hisaaboApp = new HisaaboApp();
 });

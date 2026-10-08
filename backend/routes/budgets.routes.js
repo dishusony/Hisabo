@@ -16,6 +16,9 @@ router.post('/configure-mail', budgetsController.configureMail);
 router.post('/check-alerts', budgetsController.checkAlerts);
 router.post('/test-email', budgetsController.sendTestEmail);
 router.get('/alerts/:monthKey', budgetsController.getAlerts);
+router.get('/categories/:monthKey', budgetsController.getCategoryBudgets);
+router.post('/categories/:monthKey', budgetsController.setCategoryBudget);
+router.delete('/categories/:monthKey/:category', budgetsController.deleteCategoryBudget);
 router.get('/:monthKey', budgetsController.getForMonth);
 router.put('/:monthKey', budgetsController.setBudget);
 

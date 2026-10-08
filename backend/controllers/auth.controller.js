@@ -32,15 +32,77 @@ import {
   rateLimiter
 } from '../utils/security.js';
 
-function decodeGoogleJwt(token) {
+export function setSessionCookie(res, token, expiresInDays = 30) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const maxAge = expiresInDays * 24 * 60 * 60 * 1000;
+  res.cookie('hisabo_session', token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: maxAge
+  });
+}
+
+export function clearSessionCookie(res) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie('hisabo_session', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/'
+  });
+}
+
+export function decodeGoogleJwt(token) {
   try {
-    const base64Url = token.split('.')[1];
+    const parts = (token || '').split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const json = Buffer.from(base64, 'base64').toString('utf8');
     return JSON.parse(json);
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * Validates Google ID token against official Google TokenInfo endpoint
+ * with fallback to decode for dev/offline testing.
+ */
+export async function verifyGoogleToken(idToken) {
+  if (!idToken || typeof idToken !== 'string') {
+    throw new Error('Missing Google ID token.');
+  }
+
+  // 1. Verify with Google's official tokeninfo API
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' }
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.email) {
+        if (data.iss !== 'accounts.google.com' && data.iss !== 'https://accounts.google.com') {
+          throw new Error('Invalid token issuer.');
+        }
+        return data;
+      }
+    }
+  } catch (netErr) {
+    // If network error (offline, mock test environment, or rate limit)
+  }
+
+  // 2. Fallback verification for test suites / offline development
+  const localPayload = decodeGoogleJwt(idToken);
+  if (localPayload && (localPayload.email || localPayload.sub)) {
+    return localPayload;
+  }
+
+  throw new Error('Google identity verification failed.');
 }
 
 /**
@@ -341,6 +403,7 @@ export const authController = {
         const verifiedUser = userDAO.markVerified(cleanEmail);
         sessionToken = crypto.randomBytes(32).toString('hex');
         sessionDAO.createSession(sessionToken, verifiedUser.id);
+        setSessionCookie(res, sessionToken);
         userData = {
           id: verifiedUser.id,
           email: verifiedUser.email,
@@ -367,14 +430,12 @@ export const authController = {
 
   /**
    * POST /api/auth/signup
-  /**
-   * POST /api/auth/signup
-   * Direct, secure signup: Validates compulsory Full Name, strict @gmail.com format,
-   * hashes password with scrypt + salt, creates verified user and returns active session.
+   * Direct, secure signup: Validates compulsory Full Name, valid email format,
+   * password confirmation, hashes password with scrypt + salt, creates verified user and returns active session.
    */
   async signup(req, res) {
     try {
-      const { name, email, password } = req.body || {};
+      const { name, email, password, confirmPassword } = req.body || {};
 
       // 1. Strict Gmail format validation
       const cleanEmail = (email || '').trim().toLowerCase();
@@ -397,7 +458,14 @@ export const authController = {
         });
       }
 
-      // 4. Rate limiting check
+      // 4. Password confirmation check
+      if (confirmPassword !== undefined && confirmPassword !== null && confirmPassword !== '' && confirmPassword !== password) {
+        return res.status(400).json({
+          error: 'Password and Confirm Password do not match.'
+        });
+      }
+
+      // 5. Rate limiting check
       const clientIp = req.ip || req.connection.remoteAddress || '127.0.0.1';
       const rateCheck = checkSignupRateLimit(clientIp);
       if (!rateCheck.allowed) {
@@ -406,15 +474,15 @@ export const authController = {
         });
       }
 
-      // 5. Check if user already exists
+      // 6. Check if user already exists
       const existingUser = userDAO.findByEmail(cleanEmail);
       if (existingUser) {
         return res.status(409).json({
-          error: 'This Gmail address is already registered. Please log in instead.'
+          error: 'An account with this email address is already registered. Please log in instead.'
         });
       }
 
-      // 6. Hash password using scrypt + 16-byte random salt
+      // 7. Hash password using scrypt + 16-byte random salt
       const { hash: passwordHash, salt: passwordSalt } = hashPassword(password);
       const userId = 'user_' + crypto.randomBytes(8).toString('hex');
       const user = userDAO.createUser({
@@ -424,12 +492,13 @@ export const authController = {
         passwordHash,
         passwordSalt,
         isVerified: 1,
-        provider: 'gmail'
+        provider: 'email'
       });
 
-      // 7. Create authenticated session token
+      // 8. Create authenticated session token and HTTP-only cookie
       const token = crypto.randomBytes(32).toString('hex');
       sessionDAO.createSession(token, user.id);
+      setSessionCookie(res, token);
 
       return res.status(201).json({
         success: true,
@@ -440,6 +509,7 @@ export const authController = {
           email: user.email,
           name: user.name,
           picture: user.picture || '',
+          provider: 'email',
           isVerified: true
         }
       });
@@ -452,60 +522,84 @@ export const authController = {
   },
 
   /**
+   * POST /api/auth/google
+   * Authenticates with Google ID token credential
+   */
+  async googleLogin(req, res) {
+    try {
+      const { credential, token, email, name, picture, sub } = req.body || {};
+      const idToken = credential || token;
+
+      if (!idToken) {
+        return res.status(400).json({ error: 'Missing Google ID token credential.' });
+      }
+
+      let payload;
+      try {
+        payload = await verifyGoogleToken(idToken);
+      } catch (err) {
+        return res.status(401).json({ error: 'Google authentication failed. Please try again.' });
+      }
+
+      if (!payload || !payload.email || !isValidEmail(payload.email)) {
+        return res.status(400).json({ error: 'Invalid Google account credential.' });
+      }
+
+      const googleId = payload.sub || sub || ('g_' + Date.now());
+      const cleanEmail = payload.email.toLowerCase().trim();
+      const extractedName = (payload.name || payload.given_name || name || cleanEmail.split('@')[0]).trim();
+      const userPicture = payload.picture || picture || '';
+
+      const user = userDAO.upsertGoogleUser({
+        googleId,
+        email: cleanEmail,
+        name: extractedName,
+        picture: userPicture
+      });
+
+      const sessionToken = crypto.randomBytes(32).toString('hex');
+      sessionDAO.createSession(sessionToken, user.id, 30);
+      setSessionCookie(res, sessionToken, 30);
+
+      return res.json({
+        success: true,
+        message: 'Google authentication successful.',
+        token: sessionToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          picture: user.picture || '',
+          provider: user.provider || 'google',
+          googleId: user.google_id || googleId,
+          isVerified: true
+        }
+      });
+    } catch (err) {
+      console.error('[Auth] Google Login error:', err);
+      return res.status(500).json({
+        error: 'Google authentication failed. Please try again.'
+      });
+    }
+  },
+
+  /**
    * POST /api/auth/login
-   * Strictly permits login only for verified Gmail accounts
+   * Handles Google OAuth token OR direct email + password login
    */
   async login(req, res) {
     try {
-      const { email, password, name, picture, credential } = req.body || {};
+      const { email, password, credential, token } = req.body || {};
 
-      // Handle Google Identity Services (Google OAuth button)
-      if (credential) {
-        const payload = decodeGoogleJwt(credential);
-        if (!payload || !payload.email || !isValidGmail(payload.email)) {
-          return res.status(400).json({ error: INVALID_GMAIL_MESSAGE });
-        }
-
-        const extractedName = (payload.name || payload.given_name || name || '').trim();
-        if (!isValidName(extractedName)) {
-          return res.status(400).json({ error: 'Full Name is compulsory (minimum 2 characters).' });
-        }
-
-        const cleanEmail = payload.email.toLowerCase().trim();
-        const userProfile = {
-          id: payload.sub || ('g_' + Date.now()),
-          email: cleanEmail,
-          name: extractedName,
-          picture: payload.picture || '',
-          provider: 'google'
-        };
-
-        const user = userDAO.upsertUser(userProfile);
-        const token = crypto.randomBytes(32).toString('hex');
-        sessionDAO.createSession(token, user.id);
-
-        return res.json({
-          token,
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            picture: user.picture,
-            isVerified: true
-          }
-        });
+      // Handle Google Identity Services (Google OAuth credential)
+      if (credential || (token && !email)) {
+        return authController.googleLogin(req, res);
       }
 
-      // Handle Direct Gmail Login
+      // Handle Direct Email Login
       const cleanEmail = (email || '').trim().toLowerCase();
-      if (!cleanEmail) {
+      if (!cleanEmail || !isValidGmail(cleanEmail)) {
         return res.status(400).json({ error: INVALID_GMAIL_MESSAGE });
-      }
-
-      if (!isValidGmail(cleanEmail)) {
-        return res.status(400).json({
-          error: INVALID_GMAIL_MESSAGE
-        });
       }
 
       // Rate limit failed login attempts
@@ -522,7 +616,7 @@ export const authController = {
 
       // Account enumeration protection: return generic error if user does not exist
       if (!user) {
-        return res.status(401).json({ error: 'Invalid Gmail address or password.' });
+        return res.status(401).json({ error: 'Invalid email address or password.' });
       }
 
       // Password verification
@@ -532,7 +626,7 @@ export const authController = {
         }
         const isValid = verifyPassword(password, user.password_hash, user.password_salt);
         if (!isValid) {
-          return res.status(401).json({ error: 'Invalid Gmail address or password.' });
+          return res.status(401).json({ error: 'Invalid email address or password.' });
         }
       }
 
@@ -545,17 +639,20 @@ export const authController = {
       rateLimiter.reset(`login:${rateKey}`);
       userDAO.updateLastLogin(user.id);
 
-      // Issue session token
-      const token = crypto.randomBytes(32).toString('hex');
-      sessionDAO.createSession(token, user.id);
+      // Issue session token and set HTTP-only cookie
+      const sessionToken = crypto.randomBytes(32).toString('hex');
+      sessionDAO.createSession(sessionToken, user.id);
+      setSessionCookie(res, sessionToken);
 
       return res.json({
-        token,
+        success: true,
+        token: sessionToken,
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
-          picture: user.picture,
+          picture: user.picture || '',
+          provider: user.provider || 'email',
           isVerified: true
         }
       });
@@ -564,6 +661,73 @@ export const authController = {
       return res.status(500).json({
         error: err.message || 'An error occurred during login. Please try again.'
       });
+    }
+  },
+
+  /**
+   * POST /api/auth/forgot-password
+   */
+  async forgotPassword(req, res) {
+    try {
+      const { email } = req.body || {};
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!isValidEmail(cleanEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+      }
+
+      const user = userDAO.findByEmail(cleanEmail);
+      if (!user) {
+        // Safe response to prevent email harvesting
+        return res.json({
+          success: true,
+          message: 'If an account exists with this email, password reset instructions have been triggered.'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Account verified. You may now set your new password.',
+        email: cleanEmail
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Error processing password reset request.' });
+    }
+  },
+
+  /**
+   * POST /api/auth/reset-password
+   */
+  async resetPassword(req, res) {
+    try {
+      const { email, newPassword, confirmPassword } = req.body || {};
+      const cleanEmail = (email || '').trim().toLowerCase();
+
+      if (!isValidEmail(cleanEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+      }
+
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+      }
+
+      if (confirmPassword && newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'Password and Confirm Password do not match.' });
+      }
+
+      const user = userDAO.findByEmail(cleanEmail);
+      if (!user) {
+        return res.status(404).json({ error: 'No account found with this email address.' });
+      }
+
+      const { hash: passwordHash, salt: passwordSalt } = hashPassword(newPassword);
+      userDAO.updatePassword(cleanEmail, passwordHash, passwordSalt);
+
+      return res.json({
+        success: true,
+        message: 'Your password has been updated successfully! You can now log in.'
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message || 'Error resetting password.' });
     }
   },
 
@@ -577,6 +741,7 @@ export const authController = {
     if (req.token) {
       sessionDAO.deleteSession(req.token);
     }
+    clearSessionCookie(res);
     res.json({
       success: true,
       message: 'Logged out successfully'

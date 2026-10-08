@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="midnight">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hisabo - Smart Monthly Expense Tracker</title>
-  <meta name="description" content="Hisabo - An effortless, clean, responsive monthly expense tracker web application with dynamic budget tracking, visual analytics, and 1-tap logging.">
+  <title>Hisaabo — Smarter Spending, Brighter Future</title>
+  <meta name="description" content="Hisaabo - Premium personal finance dashboard for modern wealth management, expense tracking, smart budgets, and automated milestone alerts.">
 
-  <!-- Google Fonts: Outfit (Brand & Headings) + Plus Jakarta Sans (Clean UI) -->
+  <!-- Google Fonts: Outfit (Brand, Headings & Numbers) + Plus Jakarta Sans (Clean UI Body) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,260 +14,602 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 
-  <!-- App Stylesheet -->
-  <link rel="stylesheet" href="css/style.css">
+  <!-- App Stylesheet (Design #7 Dark Glassmorphic Finance System) -->
+  <link rel="stylesheet" href="css/style.css?v=2.6">
 
   <!-- Google Identity Services (GIS) for Google / Gmail Authentication -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-  <!-- Ambient background glow for sleek modern aesthetics -->
-  <div class="ambient-glow"></div>
-  <div class="ambient-glow-2"></div>
+  <!-- Ambient background glow elements for Design #7 -->
+  <div class="ambient-glow ambient-glow-1"></div>
+  <div class="ambient-glow ambient-glow-2"></div>
+  <div class="ambient-glow ambient-glow-3"></div>
 
-  <div class="app-container">
-    <!-- Main App Header -->
-    <header class="app-header">
-      <div class="brand-wrapper">
-        <div class="brand-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3a4 4 0 0 0 0-8"/>
-          </svg>
-        </div>
-        <div>
-          <h1 class="brand-title">Hisabo</h1>
-          <p class="brand-tagline">Smart Monthly Expense & Budget Tracker</p>
-        </div>
-      </div>
-
-      <!-- Month Switcher & Quick Controls -->
-      <div class="header-controls">
-        <div class="month-selector-bar">
-          <button id="prevMonthBtn" class="month-nav-btn" title="Previous Month" aria-label="Previous Month">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-          
-          <div class="month-dropdown-wrapper">
-            <span id="currentMonthDisplay" class="month-display-label">September 2026</span>
-            <select id="monthSelect" class="month-select-input" aria-label="Select Tracking Month"></select>
+  <!-- ========================================================================
+       UNAUTHENTICATED LANDING PAGE
+       Shown to guests. Never exposes private user financial data.
+       ======================================================================== -->
+  <div id="landingPage" class="landing-page-wrap">
+    <!-- Landing Navigation -->
+    <header class="landing-nav">
+      <div class="landing-nav-inner">
+        <a href="#home" class="brand-badge-link" aria-label="Hisaabo Home">
+          <div class="brand-icon-gem">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3a4 4 0 0 0 0-8"/>
+            </svg>
           </div>
-
-          <button id="nextMonthBtn" class="month-nav-btn" title="Next Month" aria-label="Next Month">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-          </button>
-        </div>
-
-        <button id="currentMonthBtn" class="btn-secondary btn-sm" title="Jump to Current Month">
-          <span>This Month</span>
-        </button>
-
-        <!-- Theme Palette Picker Button -->
-        <button id="themePickerBtn" class="btn-secondary btn-sm" title="Choose Visual Theme" aria-label="Choose Theme">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
-          <span class="btn-text" id="themeBtnLabel">Theme</span>
-        </button>
-
-
-        <!-- Google / Gmail Auth Button (Guest State) -->
-        <button id="googleSignInBtn" class="btn-google-auth btn-sm" title="Sign in with Gmail / Google">
-          <svg class="google-icon" width="16" height="16" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
-            <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-          </svg>
-          <span class="btn-text">Sign In</span>
-        </button>
-
-        <!-- User Profile Badge & Dropdown (Authenticated State) -->
-        <div class="user-profile-wrapper" id="userProfileWrapper" style="display: none;">
-          <button id="userProfileBtn" class="user-profile-btn" aria-haspopup="true" aria-expanded="false" title="Account Menu">
-            <img id="userAvatarImg" class="user-avatar-img" src="" alt="Avatar" />
-            <span id="userAvatarInitial" class="user-avatar-initial">U</span>
-            <span class="user-profile-name" id="userDisplayName">User</span>
-            <svg class="user-dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
-          </button>
-
-          <!-- User Dropdown Menu -->
-          <div class="user-dropdown-menu" id="userProfileDropdown">
-            <div class="user-dropdown-header">
-              <div class="user-dropdown-avatar-wrap">
-                <img id="dropdownAvatarImg" class="dropdown-avatar-img" src="" alt="Avatar" />
-                <span id="dropdownAvatarInitial" class="dropdown-avatar-initial">U</span>
-              </div>
-              <div class="user-dropdown-meta">
-                <div class="dropdown-user-name" id="dropdownUserName">User Name</div>
-                <div class="dropdown-user-email" id="dropdownUserEmail">user@gmail.com</div>
-                <span class="dropdown-badge-verified">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                  Google Verified
-                </span>
-              </div>
-            </div>
-
-            <div class="user-dropdown-divider"></div>
-
-            <div class="user-dropdown-stats">
-              <div class="dropdown-stat-item">
-                <span class="stat-label">Active Records</span>
-                <span class="stat-val" id="dropdownExpenseCount">0</span>
-              </div>
-              <div class="dropdown-stat-item">
-                <span class="stat-label">Sync Status</span>
-                <span class="stat-val text-success">Saved</span>
-              </div>
-            </div>
-
-            <div class="user-dropdown-actions">
-              <button type="button" id="syncGuestDataBtn" class="dropdown-action-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-                Sync Guest Expenses
-              </button>
-              <button type="button" id="switchAccountBtn" class="dropdown-action-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                Switch Account
-              </button>
-              <button type="button" id="logoutBtn" class="dropdown-action-btn action-logout">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Sign Out
-              </button>
-            </div>
+          <div class="brand-text-block">
+            <span class="brand-title-text">Hisaabo</span>
+            <span class="brand-tagline-text">Smarter Spending, Brighter Future</span>
           </div>
-        </div>
+        </a>
 
-        <!-- Prominent Add Expense Button -->
-        <button class="btn-primary trigger-add-expense" id="headerAddExpenseBtn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>+ Add Expense</span>
-        </button>
+        <nav class="landing-links" aria-label="Landing Navigation">
+          <a href="#features" class="landing-link">Features</a>
+          <a href="#preview" class="landing-link">Dashboard</a>
+          <a href="#security" class="landing-link">Security &amp; Privacy</a>
+          <a href="#about" class="landing-link">About</a>
+        </nav>
+
+        <div class="landing-auth-actions">
+          <button type="button" id="landingSignInBtn" class="btn-ghost-glow btn-sm">
+            Sign In
+          </button>
+          <button type="button" id="landingGetStartedBtn" class="btn-gradient-neon btn-sm">
+            Get Started Free
+          </button>
+        </div>
       </div>
     </header>
 
-    <!-- Intuitive Navigation Tabs (Expenses / Analytics / Tools) -->
-    <nav class="view-tabs-bar" aria-label="Main Views">
-      <button class="view-tab active" data-tab="expenses" id="tabBtnExpenses">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <span>Expense</span>
-      </button>
-
-      <button class="view-tab" data-tab="analytics" id="tabBtnAnalytics">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        <span>Analytics & Charts</span>
-      </button>
-
-      <button class="view-tab" data-tab="tools" id="tabBtnTools">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>Tools & Backup</span>
-      </button>
-    </nav>
-
-    <!-- ======================================================================
-         VIEW 1: EXPENSES (DEFAULT)
-         ====================================================================== -->
-    <main id="viewExpenses" class="tab-view-content active">
-      <!-- Budget Exceeded Alert Banner -->
-      <div id="budgetAlertBanner" class="alert-banner" role="alert"></div>
-
-      <!-- Clean Unified Summary Card -->
-      <section class="summary-hero-card">
-        <div class="summary-top-row">
-          <div class="summary-hero-stat">
-            <span class="summary-label">Total Spent This Month</span>
-            <div class="summary-hero-number" id="kpiTotalSpent">₹0.00</div>
-          </div>
-
-          <div class="summary-budget-group">
-            <div class="summary-budget-box">
-              <span class="summary-label">Monthly Budget</span>
-              <div class="summary-budget-val">
-                <span id="kpiBudget">₹25,000.00</span>
-                <button id="editBudgetBtn" class="btn-inline-edit" title="Edit Budget">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-                  Edit
-                </button>
-              </div>
-            </div>
-
-            <div class="summary-remaining-box">
-              <span class="summary-label" id="kpiRemainingLabel">Remaining Budget</span>
-              <div class="summary-remaining-val text-success" id="kpiRemaining">₹25,000.00</div>
-            </div>
-          </div>
+    <!-- Landing Hero Section -->
+    <section class="landing-hero" id="home">
+      <div class="hero-content">
+        <div class="hero-badge">
+          <span class="badge-dot-live"></span>
+          <span>Next-Generation Fintech Financial Management</span>
         </div>
 
-        <!-- Budget Progress Bar -->
-        <div class="budget-meter-wrap">
-          <div class="progress-track">
-            <div id="kpiProgressBar" class="progress-fill progress-green"></div>
-          </div>
-          <!-- Milestone Markers for 50%, 90%, and 100% Alerts -->
-          <div class="budget-milestones-bar" id="budgetMilestonesBar">
-            <span class="milestone-badge" id="milestone50" title="Milestone: 50% budget threshold reached">
-              <span class="milestone-dot"></span> 50% Alert
-            </span>
-            <span class="milestone-badge" id="milestone90" title="Warning: 90% budget threshold reached">
-              <span class="milestone-dot"></span> 90% Alert
-            </span>
-            <span class="milestone-badge" id="milestone100" title="Critical: 100% budget limit reached">
-              <span class="milestone-dot"></span> 100% Alert
-            </span>
-            <button type="button" id="quickTestMailBtn" class="milestone-mail-btn" title="Send a test budget notification email via Gmail">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <span>Test Gmail Alert</span>
-            </button>
-          </div>
+        <h1 class="hero-headline">
+          Smarter Spending,<br>
+          <span class="text-neon-gradient">Brighter Future</span>
+        </h1>
 
-          <!-- Real Gmail Delivery Status & Quick Action Banner -->
-          <div class="budget-delivery-banner" id="budgetDeliveryBanner">
-            <div class="delivery-status-left">
-              <span class="delivery-dot" id="deliveryDot"></span>
-              <span class="delivery-text" id="deliveryText">Checking real Gmail delivery status...</span>
-            </div>
-            <button type="button" id="deliveryActionBtn" class="btn-delivery-action">
-              <span>Activate Real Gmail</span>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-          </div>
+        <p class="hero-description">
+          Take total control of your money with <strong>Hisaabo</strong>. An ultra-responsive dark finance dashboard with 1-tap expense logging, income tracking, intelligent category budgets, visual analytics, and bank-grade privacy.
+        </p>
 
-          <div class="budget-meter-labels">
-            <span id="kpiProgressText">0% of budget used</span>
-            <div class="hero-mini-stats">
-              <span><strong id="kpiTxCount">0</strong> transactions</span>
-              <span>•</span>
-              <span>Avg: <strong id="kpiAvgExpense">₹0.00</strong></span>
-              <span>•</span>
-              <span>Peak: <strong id="kpiHighestExpense">₹0.00</strong> <span id="kpiHighestItem"></span></span>
-            </div>
+        <div class="hero-cta-group">
+          <button type="button" id="heroGetStartedBtn" class="btn-gradient-neon btn-lg">
+            <span>Get Started — It's Free</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+          <button type="button" id="heroWatchDemoBtn" class="btn-glass-outline btn-lg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+            <span>Explore Live Demo</span>
+          </button>
+        </div>
+
+        <div class="hero-trust-row">
+          <div class="trust-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>100% Isolated User Storage</span>
+          </div>
+          <div class="trust-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Scrypt Password Hashing</span>
+          </div>
+          <div class="trust-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Automated Budget Alerts</span>
           </div>
         </div>
-      </section>
-
-      <!-- Instant Category Filter Chips -->
-      <div class="category-chips-bar" id="categoryChipsBar">
-        <button class="chip-btn active" data-category="All">All</button>
-        <button class="chip-btn" data-category="Food">🍔 Food</button>
-        <button class="chip-btn" data-category="Travel">🚗 Travel</button>
-        <button class="chip-btn" data-category="Shopping">🛍️ Shopping</button>
-        <button class="chip-btn" data-category="Education">🎓 Education</button>
-        <button class="chip-btn" data-category="Entertainment">🎬 Entertainment</button>
-        <button class="chip-btn" data-category="Bills">⚡ Bills</button>
-        <button class="chip-btn" data-category="Health">❤️ Health</button>
-        <button class="chip-btn" data-category="Hostel">🏠 Hostel</button>
-        <button class="chip-btn" data-category="Personal">👤 Personal</button>
-        <button class="chip-btn" data-category="Other">••• Other</button>
       </div>
 
-      <!-- Quick Search & Sort Bar -->
-      <section class="simple-search-bar">
-        <div class="search-input-wrapper">
-          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input type="text" id="searchInput" class="search-input" placeholder="Search expenses by name, notes..." aria-label="Search Expenses">
-          <button id="clearSearchBtn" class="clear-search-btn" title="Clear Search" style="display: none;">&times;</button>
+      <!-- Live Interactive Showcase Card for Design #7 -->
+      <div class="hero-showcase" id="preview">
+        <div class="showcase-card glass-panel-3d">
+          <div class="showcase-header">
+            <div class="showcase-dots">
+              <span class="dot-red"></span>
+              <span class="dot-yellow"></span>
+              <span class="dot-green"></span>
+            </div>
+            <div class="showcase-pill-title">Hisaabo Fintech Dashboard Preview</div>
+            <div class="showcase-status-badge">
+              <span class="badge-ping"></span> Live Mock
+            </div>
+          </div>
+
+          <div class="showcase-kpis-row">
+            <div class="showcase-kpi kpi-inc">
+              <div class="kpi-micro-label">TOTAL INCOME</div>
+              <div class="kpi-micro-val text-neon-green">₹15,000</div>
+              <div class="kpi-micro-sub text-success">Monthly allowance</div>
+            </div>
+            <div class="showcase-kpi kpi-exp">
+              <div class="kpi-micro-label">TOTAL EXPENSES</div>
+              <div class="kpi-micro-val text-neon-pink">₹9,450</div>
+              <div class="kpi-micro-sub text-danger">▼ -8.2% vs last mo</div>
+            </div>
+            <div class="showcase-kpi kpi-bal">
+              <div class="kpi-micro-label">REMAINING BALANCE</div>
+              <div class="kpi-micro-val text-neon-cyan">₹5,550</div>
+              <div class="kpi-micro-sub text-cyan">▲ Safe student balance</div>
+            </div>
+          </div>
+
+          <div class="showcase-budget-bar">
+            <div class="budget-bar-labels">
+              <span>Monthly Budget: ₹15,000</span>
+              <span class="text-neon-cyan">63% Used • Safe</span>
+            </div>
+            <div class="budget-bar-track">
+              <div class="budget-bar-fill" style="width: 63%;"></div>
+            </div>
+          </div>
+
+          <div class="showcase-recent-items">
+            <div class="showcase-row">
+              <span class="showcase-tag tag-food">🍔 College Canteen</span>
+              <span class="showcase-date">Oct 6</span>
+              <span class="showcase-amt text-danger">-₹180</span>
+            </div>
+            <div class="showcase-row">
+              <span class="showcase-tag tag-travel">🚗 Metro Pass</span>
+              <span class="showcase-date">Oct 6</span>
+              <span class="showcase-amt text-danger">-₹250</span>
+            </div>
+            <div class="showcase-row">
+              <span class="showcase-tag tag-salary">🎓 Monthly Pocket Money</span>
+              <span class="showcase-date">Oct 5</span>
+              <span class="showcase-amt text-success">+₹15,000</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feature Highlights Section -->
+    <section class="landing-features" id="features">
+      <div class="section-badge-center">Core Pillars</div>
+      <h2 class="section-heading-center">Everything you need to master your wealth</h2>
+      <p class="section-sub-center">Designed for students, freelancers, and professionals who demand speed, clarity, and security.</p>
+
+      <div class="features-grid-cards">
+        <!-- Feature 1 -->
+        <div class="feature-card glass-panel">
+          <div class="feature-icon-wrap icon-cyan">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <h3 class="feature-title">Track Expenses &amp; Income</h3>
+          <p class="feature-desc">1-tap logging with instant visual categories (Food, Travel, Bills, Rent) and multi-payment method tagging (UPI, Cards, Cash).</p>
         </div>
 
-        <div class="sort-wrapper">
-          <span class="sort-label">Sort:</span>
-          <select id="sortSelect" class="filter-select" aria-label="Sort Expenses">
+        <!-- Feature 2 -->
+        <div class="feature-card glass-panel">
+          <div class="feature-icon-wrap icon-purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <h3 class="feature-title">Beautiful Dynamic Analytics</h3>
+          <p class="feature-desc">High-contrast interactive charts, category percentage donuts, and smart spending insights dynamically generated from your actual records.</p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card glass-panel">
+          <div class="feature-icon-wrap icon-pink">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          </div>
+          <h3 class="feature-title">Set Budgets &amp; Financial Goals</h3>
+          <p class="feature-desc">Establish monthly spending limits and individual category caps. Automate 50%, 90%, and 100% threshold alerts delivered right to your inbox.</p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature-card glass-panel" id="security">
+          <div class="feature-icon-wrap icon-green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3 class="feature-title">100% Secure &amp; Private</h3>
+          <p class="feature-desc">Every query is strictly isolated to your authenticated account. Zero tracking, zero ad cookies, and scrypt cryptographic password protection.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- About & Trust CTA Banner -->
+    <section class="landing-cta-banner" id="about">
+      <div class="cta-banner-content glass-panel-glow">
+        <h2 class="cta-banner-heading">Ready to transform your finances?</h2>
+        <p class="cta-banner-sub">Join Hisaabo today. No credit card required. Pure financial clarity in under 30 seconds.</p>
+        <button type="button" id="footerGetStartedBtn" class="btn-gradient-neon btn-lg">
+          Create Free Hisaabo Account
+        </button>
+      </div>
+    </section>
+
+    <!-- Landing Footer -->
+    <footer class="landing-footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <div class="brand-badge-link">
+            <div class="brand-icon-gem" style="width: 26px; height: 26px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3a4 4 0 0 0 0-8"/></svg>
+            </div>
+            <span class="brand-title-text" style="font-size: 1.15rem;">Hisaabo</span>
+          </div>
+          <p class="footer-tagline">Smarter Spending, Brighter Future</p>
+        </div>
+
+        <div class="footer-links">
+          <span>&copy; 2026 Hisaabo • All financial records securely encrypted and user-isolated</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ========================================================================
+       AUTHENTICATED APPLICATION LAYOUT
+       Shown ONLY to authenticated users.
+       ======================================================================== -->
+  <div id="appLayout" class="app-layout-wrap" style="display: none;">
+    <!-- Mobile Navigation Drawer Overlay -->
+    <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- Left Modern Sidebar Navigation -->
+    <aside id="appSidebar" class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon-gem">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3a4 4 0 0 0 0-8"/>
+          </svg>
+        </div>
+        <div class="sidebar-brand-meta">
+          <span class="sidebar-brand-title">Hisaabo</span>
+          <span class="sidebar-brand-tag">Smarter Spending</span>
+        </div>
+        <button type="button" id="sidebarCloseBtn" class="sidebar-close-btn" aria-label="Close Sidebar">&times;</button>
+      </div>
+
+      <!-- Navigation Links (All 11 Core Pages) -->
+      <nav class="sidebar-menu" aria-label="Application Navigation">
+        <a href="#dashboard" class="sidebar-nav-item active" data-route="dashboard" id="navItemDashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span>Dashboard</span>
+        </a>
+
+        <a href="#transactions" class="sidebar-nav-item" data-route="transactions" id="navItemTransactions">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>Transactions</span>
+        </a>
+
+        <a href="#add-expense" class="sidebar-nav-item" data-route="add-expense" id="navItemAddExpense">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          <span>Add Expense</span>
+        </a>
+
+        <a href="#income" class="sidebar-nav-item" data-route="income" id="navItemIncome">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span>Income</span>
+        </a>
+
+        <a href="#budget" class="sidebar-nav-item" data-route="budget" id="navItemBudget">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+          <span>Monthly Budget</span>
+        </a>
+
+        <a href="#categories" class="sidebar-nav-item" data-route="categories" id="navItemCategories">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="m16 3-2 18"/></svg>
+          <span>Categories</span>
+        </a>
+
+        <a href="#calendar" class="sidebar-nav-item" data-route="calendar" id="navItemCalendar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Calendar</span>
+        </a>
+
+        <a href="#analytics" class="sidebar-nav-item" data-route="analytics" id="navItemAnalytics">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Analytics</span>
+        </a>
+
+        <a href="#goals" class="sidebar-nav-item" data-route="goals" id="navItemGoals">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          <span>Goals</span>
+        </a>
+
+        <a href="#profile" class="sidebar-nav-item" data-route="profile" id="navItemProfile">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Profile</span>
+        </a>
+
+        <a href="#settings" class="sidebar-nav-item" data-route="settings" id="navItemSettings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer: Mini User Profile & Logout -->
+      <div class="sidebar-user-footer">
+        <a href="#profile" class="sidebar-user-pill" title="View Profile">
+          <div class="mini-avatar-wrap">
+            <img id="sidebarAvatarImg" class="mini-avatar-img" src="" alt="User Avatar" style="display: none;">
+            <span id="sidebarAvatarInitial" class="mini-avatar-initial">U</span>
+          </div>
+          <div class="mini-user-info">
+            <span class="mini-user-name" id="sidebarUserName">User</span>
+            <span class="mini-user-email" id="sidebarUserEmail">user@gmail.com</span>
+          </div>
+        </a>
+        <button type="button" id="sidebarLogoutBtn" class="sidebar-logout-btn" title="Sign Out">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="app-main-viewport">
+      <!-- Top Application Header Bar -->
+      <header class="app-topbar">
+        <!-- Left: Mobile Menu Toggle -->
+        <button type="button" id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open Navigation">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+
+        <!-- Global Search Bar -->
+        <div class="topbar-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="globalSearchInput" class="topbar-search-input" placeholder="Search transactions, notes, sources...">
+          <button type="button" id="clearGlobalSearchBtn" class="clear-search-btn" style="display: none;">&times;</button>
+        </div>
+
+        <!-- Right Controls: Month Selector, Notification Bell, Add Expense, Avatar -->
+        <div class="topbar-controls">
+          <!-- Month Selector -->
+          <div class="topbar-month-selector">
+            <button type="button" id="prevMonthBtn" class="month-nav-btn" title="Previous Month">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <div class="month-select-wrap">
+              <span id="currentMonthDisplay" class="month-display-text">October 2026</span>
+              <select id="monthSelect" class="month-native-select" aria-label="Select Active Month"></select>
+            </div>
+            <button type="button" id="nextMonthBtn" class="month-nav-btn" title="Next Month">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" id="currentMonthBtn" class="btn-ghost-sm" title="Jump to Current Month">
+              Today
+            </button>
+          </div>
+
+          <!-- Notification Bell with Dropdown -->
+          <div class="notification-wrap">
+            <button type="button" id="notifBellBtn" class="icon-circle-btn" aria-label="Notifications" title="Budget & Expense Notifications">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <span id="notifBadge" class="notif-badge-pill" style="display: none;">0</span>
+            </button>
+            <div id="notifDropdown" class="notif-dropdown-menu" style="display: none;">
+              <div class="notif-header">
+                <span class="notif-title">Alerts &amp; Notifications</span>
+                <button type="button" id="clearNotifsBtn" class="notif-clear-link">Clear</button>
+              </div>
+              <div id="notifList" class="notif-list-container">
+                <div class="notif-empty">No active notifications</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick "+ Add Expense" Trigger -->
+          <button type="button" class="btn-gradient-neon btn-sm trigger-add-expense" id="topbarAddExpenseBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Add Expense</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Network Resilience Offline Banner -->
+      <div id="networkStatusBanner" class="network-status-banner hidden" role="alert">
+        <span class="network-pulse-dot"></span>
+        <span id="networkStatusMsg">Working offline. All changes will automatically sync when online.</span>
+        <button type="button" id="networkRetryBtn" class="btn-retry-network">Retry Sync</button>
+      </div>
+
+      <!-- ====================================================================
+           VIEW 1: DASHBOARD
+           ==================================================================== -->
+      <main id="viewDashboard" class="route-view-content active">
+        <!-- Dashboard Greeting Header -->
+        <div class="dashboard-greeting-banner">
+          <div>
+            <h2 class="greeting-title">Hi, <span id="dashGreetingName">User</span> 👋</h2>
+            <p class="greeting-subtitle">Track your spending and build a better tomorrow.</p>
+          </div>
+          <div class="greeting-actions">
+            <button type="button" class="btn-secondary btn-sm trigger-add-income">
+              <span>+ Log Income</span>
+            </button>
+            <button type="button" class="btn-gradient-neon btn-sm trigger-add-expense">
+              <span>+ Add Expense</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Budget Alert Banner (Critical warning if limit reached) -->
+        <div id="budgetAlertBanner" class="budget-alert-banner" style="display: none;"></div>
+
+        <!-- 3 Financial Summary Cards (Section 9) -->
+        <section class="fintech-summary-grid" aria-label="Financial Summary Cards">
+          <!-- Card 1: Total Budget (Student Pocket Money / Allowance) -->
+          <div class="fintech-card card-income" id="cardTotalIncome">
+            <div class="card-glow-layer"></div>
+            <div class="card-inner">
+              <div class="card-meta-top">
+                <span class="card-icon-badge icon-badge-income">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </span>
+                <span class="card-label">TOTAL INCOME</span>
+              </div>
+              <div class="card-number-hero text-neon-green" id="kpiTotalIncome">₹0.00</div>
+              <div class="card-trend-row">
+                <span class="trend-tag trend-positive" id="kpiIncomeTrend">▲ +0%</span>
+                <span class="trend-context">Monthly Income &amp; Allowance</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Total Expenses -->
+          <div class="fintech-card card-expenses" id="cardTotalExpenses">
+            <div class="card-glow-layer"></div>
+            <div class="card-inner">
+              <div class="card-meta-top">
+                <span class="card-icon-badge icon-badge-expense">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                </span>
+                <span class="card-label">TOTAL EXPENSES</span>
+              </div>
+              <div class="card-number-hero text-neon-pink" id="kpiTotalSpent">₹0.00</div>
+              <div class="card-trend-row">
+                <span class="trend-tag trend-negative" id="kpiExpenseTrend">▼ -0%</span>
+                <span class="trend-context">vs previous period</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Remaining Budget / Balance -->
+          <div class="fintech-card card-balance" id="cardBalance">
+            <div class="card-glow-layer"></div>
+            <div class="card-inner">
+              <div class="card-meta-top">
+                <span class="card-icon-badge icon-badge-balance">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                </span>
+                <span class="card-label">REMAINING BALANCE</span>
+              </div>
+              <div class="card-number-hero text-neon-cyan" id="kpiBalance">₹0.00</div>
+              <div class="card-trend-row">
+                <span class="trend-tag trend-cyan" id="kpiBalanceTrend">● Safe</span>
+                <span class="trend-context" id="kpiBalanceSubtext">Income minus Expenses</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Charts Grid (Spending Trend + Category Breakdown) -->
+        <section class="dashboard-charts-grid">
+          <!-- Spending Chart Card (Section 10) -->
+          <div class="chart-panel-card glass-panel">
+            <div class="panel-header-row">
+              <div>
+                <h3 class="panel-title">Monthly Spending Trend</h3>
+                <p class="panel-subtitle">Interactive visual analysis of daily expenditure</p>
+              </div>
+              <div class="period-toggle-group">
+                <button type="button" class="btn-period-toggle active" data-period="monthly">Monthly</button>
+                <button type="button" class="btn-period-toggle" data-period="weekly">Weekly</button>
+                <button type="button" class="btn-period-toggle" data-period="yearly">Yearly</button>
+              </div>
+            </div>
+            <div class="chart-canvas-box">
+              <canvas id="spendingTrendChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Category Breakdown Card (Section 11) -->
+          <div class="chart-panel-card glass-panel">
+            <div class="panel-header-row">
+              <div>
+                <h3 class="panel-title">Expense Breakdown</h3>
+                <p class="panel-subtitle">Share of spending by category</p>
+              </div>
+              <a href="#categories" class="panel-link-subtle">Manage</a>
+            </div>
+            <div class="chart-canvas-box doughnut-box">
+              <canvas id="categoryDonutChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- Quick Budget Status & Recent Transactions Row -->
+        <section class="dashboard-bottom-grid">
+          <!-- Monthly Budget Progress Card (Section 16 mini) -->
+          <div class="glass-panel budget-widget-panel">
+            <div class="panel-header-row">
+              <h3 class="panel-title">Monthly Budget Progress</h3>
+              <button type="button" id="editBudgetTriggerBtn" class="btn-ghost-sm" title="Adjust Budget Limit">Edit Budget</button>
+            </div>
+            <div class="budget-stat-digits">
+              <span class="budget-used-num" id="dashBudgetSpent">₹0.00</span>
+              <span class="budget-total-num">/ <span id="dashBudgetLimit">₹25,000</span></span>
+            </div>
+            <div class="budget-progress-track">
+              <div id="dashProgressBar" class="budget-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="budget-meta-indicators">
+              <span class="budget-pct-tag" id="dashBudgetPct">0% Consumed</span>
+              <span class="budget-rem-tag" id="dashBudgetRemaining">₹25,000 Remaining</span>
+            </div>
+
+            <!-- Milestone Markers for Alerts (50%, 90%, 100%) -->
+            <div class="milestones-row">
+              <span class="milestone-badge" id="dashMilestone50">50% Halfway</span>
+              <span class="milestone-badge" id="dashMilestone90">90% Warning</span>
+              <span class="milestone-badge" id="dashMilestone100">100% Critical</span>
+            </div>
+          </div>
+
+          <!-- Recent Transactions Card (Section 12) -->
+          <div class="glass-panel recent-tx-panel">
+            <div class="panel-header-row">
+              <div>
+                <h3 class="panel-title">Recent Transactions</h3>
+                <p class="panel-subtitle">Your latest logged purchases and income</p>
+              </div>
+              <a href="#transactions" class="panel-link-primary">View All &rarr;</a>
+            </div>
+
+            <div class="recent-tx-list" id="dashboardRecentList">
+              <!-- Dynamically populated rows -->
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ====================================================================
+           VIEW 2: TRANSACTIONS (Section 14)
+           ==================================================================== -->
+      <section id="viewTransactions" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Transactions Log</h2>
+            <p class="view-desc">Search, filter, view details, edit, and safely manage all financial transactions.</p>
+          </div>
+          <div class="view-header-actions">
+            <button type="button" class="btn-secondary btn-sm trigger-add-income">+ Add Income</button>
+            <button type="button" class="btn-gradient-neon btn-sm trigger-add-expense">+ Add Expense</button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="transactions-filter-bar glass-panel">
+          <!-- Type Filter Pills: All / Expenses / Income -->
+          <div class="tx-type-tabs" role="tablist">
+            <button type="button" class="tx-type-tab active" data-type-filter="all">All</button>
+            <button type="button" class="tx-type-tab" data-type-filter="expense">Expenses Only</button>
+            <button type="button" class="tx-type-tab" data-type-filter="income">Income Only</button>
+          </div>
+
+          <!-- Category Filter -->
+          <select id="txFilterCategory" class="filter-select" aria-label="Filter by Category">
+            <option value="All">All Categories</option>
+          </select>
+
+          <!-- Payment Method Filter -->
+          <select id="txFilterPayment" class="filter-select" aria-label="Filter by Payment Method">
+            <option value="All">All Payment Methods</option>
+          </select>
+
+          <!-- Sort Order -->
+          <select id="txSortSelect" class="filter-select" aria-label="Sort Transactions">
             <option value="date-desc">Newest First</option>
             <option value="date-asc">Oldest First</option>
             <option value="amount-desc">Highest Amount</option>
@@ -275,164 +617,750 @@
           </select>
         </div>
 
-        <!-- Hidden filter selects for backward compatibility -->
-        <select id="filterCategory" style="display: none;"><option value="All">All Categories</option></select>
-        <select id="filterPayment" style="display: none;"><option value="All">All Payment Methods</option></select>
-        <button id="resetFiltersBtn" style="display: none;"></button>
+        <!-- Transactions Table Container -->
+        <div class="transactions-table-wrap glass-panel">
+          <!-- Desktop Table -->
+          <table class="fintech-table" id="transactionsTable">
+            <thead>
+              <tr>
+                <th style="width: 50px;">Type</th>
+                <th>Date</th>
+                <th>Description / Notes</th>
+                <th>Category / Source</th>
+                <th>Payment Method</th>
+                <th style="text-align: right;">Amount (₹)</th>
+                <th style="text-align: right; width: 140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+
+          <!-- Mobile Touch Card List -->
+          <div class="transactions-mobile-list" id="transactionsMobileList">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state-card" id="transactionsEmptyState" style="display: none;">
+            <div class="empty-icon-wrap">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+            </div>
+            <h3 class="empty-title">No transactions found</h3>
+            <p class="empty-desc">No entries match your search and filter criteria. Log an expense or income to populate your records.</p>
+            <button type="button" class="btn-gradient-neon btn-sm trigger-add-expense">+ Add First Expense</button>
+          </div>
+
+          <!-- Table Footer / Pagination -->
+          <div class="table-pagination-footer">
+            <span id="txPaginationInfo" class="pagination-info-text">Showing 0 transactions</span>
+            <div class="pagination-controls" id="txPaginationControls">
+              <button type="button" id="txPrevPageBtn" class="btn-ghost-sm" disabled>&larr; Previous</button>
+              <span id="txPageIndicator" class="page-indicator">Page 1 of 1</span>
+              <button type="button" id="txNextPageBtn" class="btn-ghost-sm" disabled>Next &rarr;</button>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <!-- Expenses Table & Mobile Card View -->
-      <section class="table-container" aria-label="Expense Log">
-        <!-- Desktop Table -->
-        <div class="table-wrapper" id="tableWrapper">
-          <table class="expense-table">
+      <!-- ====================================================================
+           VIEW 3: ADD EXPENSE (Section 13)
+           ==================================================================== -->
+      <section id="viewAddExpense" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Add Expense</h2>
+            <p class="view-desc">Record purchases, bills, or outings with instant category selection.</p>
+          </div>
+        </div>
+
+        <div class="expense-entry-container glass-panel">
+          <form id="pageExpenseForm" novalidate>
+            <!-- Large Prominent Amount Input -->
+            <div class="form-group amount-group-prominent">
+              <label class="form-label" for="pageExpAmount">Amount (₹) * <span class="badge-req">Required</span></label>
+              <div class="amount-hero-input-wrap">
+                <span class="currency-symbol-hero">₹</span>
+                <input type="number" id="pageExpAmount" class="amount-hero-input" placeholder="0.00" step="0.01" min="0.01" required>
+              </div>
+            </div>
+
+            <!-- Item Name & Date in 2 columns -->
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="pageExpItem">What did you buy? * <span class="badge-req">Required</span></label>
+                <input type="text" id="pageExpItem" class="form-control" placeholder="e.g. Zomato Biryani, Metro Card, Swiggy" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pageExpDate">Date * <span class="badge-req">Required</span></label>
+                <input type="date" id="pageExpDate" class="form-control" required>
+              </div>
+            </div>
+
+            <!-- 1-Tap Category Selector (Section 13) -->
+            <div class="form-group">
+              <label class="form-label">Category * (1-tap selection)</label>
+              <div class="category-pills-selector" id="pageExpCategoryPills">
+                <!-- Dynamically populated in ui.js -->
+              </div>
+              <input type="hidden" id="pageExpCategoryHidden" value="Food">
+            </div>
+
+            <!-- 1-Tap Payment Method Selector (Section 13) -->
+            <div class="form-group">
+              <label class="form-label">Payment Method * (1-tap selection)</label>
+              <div class="payment-pills-selector" id="pageExpPaymentPills">
+                <!-- Dynamically populated in ui.js -->
+              </div>
+              <input type="hidden" id="pageExpPaymentHidden" value="UPI">
+            </div>
+
+            <!-- Notes / Description -->
+            <div class="form-group">
+              <label class="form-label" for="pageExpNotes">Notes / Description (Optional)</label>
+              <input type="text" id="pageExpNotes" class="form-control" placeholder="Additional details, who you split with, etc.">
+            </div>
+
+            <!-- Submit Actions -->
+            <div class="form-actions-row">
+              <button type="button" class="btn-secondary" id="pageExpCancelBtn">Cancel</button>
+              <button type="submit" class="btn-gradient-neon btn-lg" id="pageExpSubmitBtn">
+                <span>Save Expense Record</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 4: INCOME (Section 15)
+           ==================================================================== -->
+      <section id="viewIncome" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Income &amp; Allowance</h2>
+            <p class="view-desc">Record monthly pocket money, stipend, salary, or part-time earnings.</p>
+          </div>
+          <button type="button" class="btn-gradient-neon btn-sm trigger-add-income">+ Add Income</button>
+        </div>
+
+        <!-- Income / Budget Summary Metrics -->
+        <div class="income-metrics-grid">
+          <div class="metric-card glass-panel">
+            <span class="metric-label">TOTAL INCOME THIS MONTH</span>
+            <span class="metric-val text-neon-green" id="incomeMetricTotal">₹0.00</span>
+          </div>
+          <div class="metric-card glass-panel">
+            <span class="metric-label">RECORDED SOURCES</span>
+            <span class="metric-val text-neon-cyan" id="incomeMetricCount">0 Entries</span>
+          </div>
+          <div class="metric-card glass-panel">
+            <span class="metric-label">REMAINING BALANCE</span>
+            <span class="metric-val text-neon-purple" id="incomeMetricBalance">₹0.00</span>
+          </div>
+        </div>
+
+        <!-- Income Entries Table -->
+        <div class="glass-panel" style="margin-top: 1.5rem;">
+          <table class="fintech-table" id="incomeTable">
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Item / Description</th>
-                <th>Category</th>
-                <th>Payment</th>
-                <th>Amount (₹)</th>
-                <th style="text-align: right;">Actions</th>
+                <th>Source / Description</th>
+                <th>Received Via</th>
+                <th>Notes</th>
+                <th style="text-align: right;">Amount (₹)</th>
+                <th style="text-align: right; width: 120px;">Actions</th>
               </tr>
             </thead>
-            <tbody id="expenseTableBody">
-              <!-- Dynamic rows rendered by ui.js -->
+            <tbody id="incomeTableBody">
+              <!-- Dynamically populated -->
             </tbody>
           </table>
-        </div>
 
-        <!-- Mobile Touch-friendly Card List -->
-        <div class="expense-card-list" id="expenseCardList">
-          <!-- Dynamic mobile cards rendered by ui.js -->
-        </div>
-
-        <!-- Empty State -->
-        <div class="empty-state" id="tableEmptyState" style="display: none;">
-          <div class="empty-icon-wrap">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          <div class="empty-state-card" id="incomeEmptyState" style="display: none;">
+            <div class="empty-icon-wrap">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <h3 class="empty-title">No income or allowance logged yet</h3>
+            <p class="empty-desc">Add your monthly salary, stipend, or pocket money to track your remaining balance.</p>
+            <button type="button" class="btn-gradient-neon btn-sm trigger-add-income">+ Add Income</button>
           </div>
-          <h3 class="empty-title">No expenses found</h3>
-          <p class="empty-desc">No purchases match your current filters. Add a new expense with the button below!</p>
-          <button class="btn-primary trigger-add-expense">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            + Add First Expense
-          </button>
-        </div>
-
-        <!-- Table Summary Footer -->
-        <div class="table-footer">
-          <span id="tableSummaryText">Showing 0 transactions</span>
-          <span>Hisabo • 100% Private Local Storage</span>
         </div>
       </section>
-    </main>
 
-    <!-- ======================================================================
-         VIEW 2: ANALYTICS & CHARTS
-         ====================================================================== -->
-    <section id="viewAnalytics" class="tab-view-content">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Spending Insights & Visual Trends
-        </h2>
+      <!-- ====================================================================
+           VIEW 5: BUDGET (Section 16)
+           ==================================================================== -->
+      <section id="viewBudget" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Monthly Budget</h2>
+            <p class="view-desc">Manage your single monthly spending limit with automated milestone alerts.</p>
+          </div>
+          <button type="button" class="btn-secondary btn-sm" id="budgetOpenOverallModalBtn">Edit Monthly Budget</button>
+        </div>
+
+        <!-- Overall Budget Main Card -->
+        <div class="budget-master-card glass-panel-glow">
+          <div class="budget-master-header">
+            <div>
+              <span class="micro-badge">MONTHLY SPENDING CEILING</span>
+              <h3 class="budget-target-amount" id="budgetPageLimitDisplay">₹25,000</h3>
+            </div>
+            <div class="budget-health-tag" id="budgetHealthTag">Safe (0% Used)</div>
+          </div>
+
+          <div class="budget-master-progress">
+            <div id="budgetPageProgressBar" class="budget-master-fill" style="width: 0%;"></div>
+          </div>
+
+          <div class="budget-master-stats-row">
+            <div>
+              <span class="stat-meta-label">Total Spent So Far</span>
+              <span class="stat-meta-val text-neon-pink" id="budgetPageSpentDisplay">₹0.00</span>
+            </div>
+            <div>
+              <span class="stat-meta-label">Remaining Safe Spending</span>
+              <span class="stat-meta-val text-neon-green" id="budgetPageRemainingDisplay">₹25,000</span>
+            </div>
+            <div>
+              <span class="stat-meta-label">Daily Safe Allowance</span>
+              <span class="stat-meta-val text-neon-cyan" id="budgetPageDailyAllowance">₹833 / day</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category Budgets Section (Hidden: single monthly budget active) -->
+        <div class="category-budgets-section" style="display: none;">
+          <div class="section-sub-header">
+            <div>
+              <h3 class="sub-header-title">Category Budgets</h3>
+              <p class="sub-header-desc">Set specific spending caps for Food, Travel, Shopping, etc.</p>
+            </div>
+            <button type="button" class="btn-gradient-neon btn-sm" id="addCategoryBudgetBtn">+ Add Category Budget</button>
+          </div>
+
+          <div class="category-budgets-grid" id="categoryBudgetsGrid">
+            <!-- Dynamically populated in ui.js -->
+          </div>
+        </div>
+
+        <!-- Budget Alerts Management -->
+        <div class="budget-alerts-panel glass-panel" style="margin-top: 2rem;">
+          <div class="panel-header-row">
+            <div>
+              <h3 class="panel-title">Automated Gmail Milestone Alerts</h3>
+              <p class="panel-subtitle">Delivered straight to your inbox at 50%, 90%, and 100% threshold crossings.</p>
+            </div>
+            <button type="button" class="btn-secondary btn-sm" id="configureMailBtn">Configure Gmail</button>
+          </div>
+
+          <div class="alert-milestones-visual">
+            <div class="milestone-box" id="boxMilestone50">
+              <span class="milestone-num">50%</span>
+              <span class="milestone-name">Halfway Notification</span>
+              <span class="milestone-badge-state" id="badgeState50">Pending</span>
+            </div>
+            <div class="milestone-box" id="boxMilestone90">
+              <span class="milestone-num">90%</span>
+              <span class="milestone-name">Warning Notification</span>
+              <span class="milestone-badge-state" id="badgeState90">Pending</span>
+            </div>
+            <div class="milestone-box" id="boxMilestone100">
+              <span class="milestone-num">100%</span>
+              <span class="milestone-name">Limit Exceeded Alert</span>
+              <span class="milestone-badge-state" id="badgeState100">Pending</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 6: CATEGORIES (Section 17)
+           ==================================================================== -->
+      <section id="viewCategories" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Categories Management</h2>
+            <p class="view-desc">Organize spending with default and custom categories, custom icons, and colors.</p>
+          </div>
+          <button type="button" class="btn-gradient-neon btn-sm" id="openAddCategoryModalBtn">+ Create Custom Category</button>
+        </div>
+
+        <div class="categories-cards-grid" id="categoriesGrid">
+          <!-- Dynamically populated in ui.js -->
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 7: CALENDAR (Section 20)
+           ==================================================================== -->
+      <section id="viewCalendar" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Spending Calendar</h2>
+            <p class="view-desc">View financial activity by day. Tap any date to inspect individual transactions.</p>
+          </div>
+        </div>
+
+        <div class="calendar-layout-grid">
+          <!-- Calendar Month Grid Card -->
+          <div class="calendar-card glass-panel">
+            <div class="calendar-grid-header" id="calendarGridHeader">
+              <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+            </div>
+            <div class="calendar-days-container" id="calendarDaysGrid">
+              <!-- Dynamically populated in ui.js -->
+            </div>
+          </div>
+
+          <!-- Date Detail Drawer Card -->
+          <div class="calendar-detail-card glass-panel" id="calendarDateDetailCard">
+            <div class="detail-header">
+              <h3 class="detail-date-title" id="calendarSelectedDateLabel">Select a Date</h3>
+              <span class="detail-date-badge" id="calendarSelectedDateTotal">₹0.00 Spent</span>
+            </div>
+            <div class="detail-transactions-list" id="calendarSelectedDateList">
+              <p class="text-muted" style="font-size: 0.85rem; padding: 1rem 0;">Click on any day in the calendar to view full transaction records.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 8: ANALYTICS (Section 18)
+           ==================================================================== -->
+      <section id="viewAnalytics" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Spending Analytics &amp; Visual Insights</h2>
+            <p class="view-desc">Deep-dive financial trends, category comparison, top expenses, and automated insights.</p>
+          </div>
+        </div>
+
+        <!-- Top Analytics KPI Metric Cards -->
+        <div class="analytics-metrics-row">
+          <div class="metric-glass-pill">
+            <span class="pill-label">DAILY AVERAGE SPEND</span>
+            <span class="pill-val text-neon-cyan" id="anAvgDaily">₹0.00</span>
+          </div>
+          <div class="metric-glass-pill">
+            <span class="pill-label">HIGHEST SPENDING DAY</span>
+            <span class="pill-val text-neon-pink" id="anHighestDay">None</span>
+          </div>
+          <div class="metric-glass-pill">
+            <span class="pill-label">TOP EXPENSE CATEGORY</span>
+            <span class="pill-val text-neon-purple" id="anTopCategory">None</span>
+          </div>
+          <div class="metric-glass-pill">
+            <span class="pill-label">TOTAL TRANSACTIONS</span>
+            <span class="pill-val text-neon-green" id="anTxCount">0</span>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="analytics-charts-grid">
+          <!-- 1. Expense Trend Line Chart -->
+          <div class="chart-panel-card glass-panel">
+            <h3 class="panel-title">Daily Expense Trend</h3>
+            <div class="chart-canvas-box">
+              <canvas id="anExpenseTrendChart"></canvas>
+            </div>
+          </div>
+
+          <!-- 2. Category Comparison Bar Chart -->
+          <div class="chart-panel-card glass-panel">
+            <h3 class="panel-title">Category Spending Comparison</h3>
+            <div class="chart-canvas-box">
+              <canvas id="anCategoryBarChart"></canvas>
+            </div>
+          </div>
+
+          <!-- 3. Payment Method Share Donut -->
+          <div class="chart-panel-card glass-panel">
+            <h3 class="panel-title">Payment Method Share</h3>
+            <div class="chart-canvas-box doughnut-box">
+              <canvas id="anPaymentDonutChart"></canvas>
+            </div>
+          </div>
+
+          <!-- 4. Top Categories Ranked List -->
+          <div class="chart-panel-card glass-panel">
+            <h3 class="panel-title">Top Categories Ranked</h3>
+            <div class="ranked-categories-list" id="anRankedCategoriesList">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Spending Insights (Section 18 derived from real data) -->
+        <div class="spending-insights-panel glass-panel" style="margin-top: 2rem;">
+          <h3 class="panel-title">Automated Spending Insights</h3>
+          <div class="insights-list" id="anInsightsList">
+            <!-- Dynamically populated from real data -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 9: GOALS (Section 19)
+           ==================================================================== -->
+      <section id="viewGoals" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Financial Savings Goals</h2>
+            <p class="view-desc">Track savings targets for emergency funds, laptops, vacations, vehicles, or gadgets.</p>
+          </div>
+          <button type="button" class="btn-gradient-neon btn-sm" id="openAddGoalModalBtn">+ Create Savings Goal</button>
+        </div>
+
+        <div class="goals-cards-grid" id="goalsGrid">
+          <!-- Dynamically populated in ui.js -->
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 10: PROFILE (Section 21)
+           ==================================================================== -->
+      <section id="viewProfile" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">User Profile</h2>
+            <p class="view-desc">View your account information and lifetime tracking statistics.</p>
+          </div>
+        </div>
+
+        <div class="profile-layout-grid">
+          <!-- Profile Information Card -->
+          <div class="profile-info-card glass-panel">
+            <div class="profile-avatar-center">
+              <img id="profilePageAvatarImg" class="profile-large-avatar" src="" alt="Avatar" style="display: none;">
+              <span id="profilePageAvatarInitial" class="profile-large-initial">U</span>
+            </div>
+            <h3 class="profile-name-text" id="profilePageName">User Name</h3>
+            <p class="profile-email-text" id="profilePageEmail">user@gmail.com</p>
+            <span class="badge-verified-glow">Google Verified / Secured</span>
+
+            <form id="profileEditForm" class="profile-edit-form" style="margin-top: 1.5rem;">
+              <div class="form-group">
+                <label class="form-label" for="profileNameInput">Full Name</label>
+                <input type="text" id="profileNameInput" class="form-control" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="profilePhoneInput">Phone Number</label>
+                <input type="tel" id="profilePhoneInput" class="form-control" placeholder="+91 98765 43210">
+              </div>
+              <button type="submit" class="btn-gradient-neon btn-sm" style="width: 100%; justify-content: center;">
+                Save Profile Changes
+              </button>
+            </form>
+          </div>
+
+          <!-- Lifetime Activity Statistics -->
+          <div class="profile-stats-card glass-panel">
+            <h3 class="panel-title">Lifetime Financial Activity</h3>
+            <div class="profile-stats-list">
+              <div class="stat-row-item">
+                <span class="stat-row-label">Total Logged Expenses</span>
+                <span class="stat-row-val text-neon-pink" id="profileStatTotalExp">₹0.00</span>
+              </div>
+              <div class="stat-row-item">
+                <span class="stat-row-label">Total Logged Income</span>
+                <span class="stat-row-val text-neon-green" id="profileStatTotalInc">₹0.00</span>
+              </div>
+              <div class="stat-row-item">
+                <span class="stat-row-label">Total Transactions Count</span>
+                <span class="stat-row-val text-neon-cyan" id="profileStatCount">0</span>
+              </div>
+              <div class="stat-row-item">
+                <span class="stat-row-label">Active Savings Goals</span>
+                <span class="stat-row-val text-neon-purple" id="profileStatGoals">0</span>
+              </div>
+              <div class="stat-row-item">
+                <span class="stat-row-label">Member Since</span>
+                <span class="stat-row-val" id="profileStatDate">October 2026</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW 11: SETTINGS (Section 22)
+           ==================================================================== -->
+      <section id="viewSettings" class="route-view-content">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Settings &amp; Preferences</h2>
+            <p class="view-desc">Customize theme palettes, currency formatting, notification alerts, and security.</p>
+          </div>
+        </div>
+
+        <div class="settings-sections-list">
+          <!-- Appearance & Visual Themes -->
+          <div class="settings-card glass-panel">
+            <h3 class="settings-section-title">Visual Appearance &amp; Design Theme</h3>
+            <p class="settings-section-desc">Select your preferred high-contrast color scheme for Hisaabo.</p>
+            <div class="theme-picker-grid">
+              <button type="button" class="theme-choice-btn active" data-set-theme="midnight">
+                <span class="theme-dot" style="background: linear-gradient(135deg, #070a14, #38bdf8);"></span>
+                <span>🌌 Midnight Cyber (Design #7)</span>
+              </button>
+              <button type="button" class="theme-choice-btn" data-set-theme="emerald">
+                <span class="theme-dot" style="background: linear-gradient(135deg, #050d0a, #10b981);"></span>
+                <span>💎 Emerald Luxury</span>
+              </button>
+              <button type="button" class="theme-choice-btn" data-set-theme="amethyst">
+                <span class="theme-dot" style="background: linear-gradient(135deg, #0b0714, #a855f7);"></span>
+                <span>🍇 Royal Amethyst</span>
+              </button>
+              <button type="button" class="theme-choice-btn" data-set-theme="ocean">
+                <span class="theme-dot" style="background: linear-gradient(135deg, #040d1a, #0284c7);"></span>
+                <span>🌊 Ocean Sapphire</span>
+              </button>
+              <button type="button" class="theme-choice-btn" data-set-theme="pearl">
+                <span class="theme-dot" style="background: linear-gradient(135deg, #f8fafc, #059669);"></span>
+                <span>☀️ Pearl Light</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Currency Settings -->
+          <div class="settings-card glass-panel">
+            <h3 class="settings-section-title">Currency &amp; Regional Formatting</h3>
+            <div class="form-group" style="max-width: 320px; margin-top: 0.75rem;">
+              <label class="form-label" for="settingsCurrencySelect">Active Currency Symbol</label>
+              <select id="settingsCurrencySelect" class="form-control">
+                <option value="INR">₹ INR (Indian Rupee)</option>
+                <option value="USD">$ USD (US Dollar)</option>
+                <option value="EUR">€ EUR (Euro)</option>
+                <option value="GBP">£ GBP (British Pound)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Notifications Settings -->
+          <div class="settings-card glass-panel">
+            <h3 class="settings-section-title">Notifications &amp; Alerts</h3>
+            <div class="toggles-list" style="margin-top: 1rem;">
+              <label class="toggle-row">
+                <input type="checkbox" id="toggleExpenseAlerts" checked>
+                <span>Expense limit &amp; velocity alerts</span>
+              </label>
+              <label class="toggle-row">
+                <input type="checkbox" id="toggleBudgetAlerts" checked>
+                <span>Budget milestone Gmail notifications (50%, 90%, 100%)</span>
+              </label>
+              <label class="toggle-row">
+                <input type="checkbox" id="toggleWeeklyReports" checked>
+                <span>Weekly financial performance summary</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Data Tools & Backup -->
+          <div class="settings-card glass-panel">
+            <h3 class="settings-section-title">Data Backup &amp; CSV Tools</h3>
+            <p class="settings-section-desc">Export your records for Excel or Google Sheets, or restore from CSV.</p>
+            <div class="tools-buttons-row" style="margin-top: 0.75rem;">
+              <button type="button" id="settingsExportCsvBtn" class="btn-secondary btn-sm">Export to CSV</button>
+              <button type="button" id="settingsImportCsvBtn" class="btn-secondary btn-sm">Import CSV</button>
+              <button type="button" id="settingsReloadDemoBtn" class="btn-secondary btn-sm">Load Demo Records</button>
+            </div>
+          </div>
+
+          <!-- Security Settings -->
+          <div class="settings-card glass-panel">
+            <h3 class="settings-section-title">Account Security</h3>
+            <p class="settings-section-desc">Change your password or manage active session security.</p>
+            <form id="settingsPasswordForm" style="max-width: 380px; margin-top: 1rem;">
+              <div class="form-group">
+                <label class="form-label" for="settingsNewPassword">New Password (min 6 characters)</label>
+                <input type="password" id="settingsNewPassword" class="form-control" minlength="6" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="settingsConfirmPassword">Confirm New Password</label>
+                <input type="password" id="settingsConfirmPassword" class="form-control" minlength="6" required>
+              </div>
+              <button type="submit" class="btn-secondary btn-sm">Update Password</button>
+            </form>
+          </div>
+
+          <!-- Danger Zone: Account Deletion -->
+          <div class="settings-card danger-panel glass-panel">
+            <h3 class="settings-section-title text-danger">Danger Zone — Wipe Account Data</h3>
+            <p class="settings-section-desc">Permanently erase your account, login credentials, and all recorded transactions.</p>
+            <button type="button" id="deleteAccountTriggerBtn" class="btn-danger-outline btn-sm" style="margin-top: 0.75rem;">
+              Delete Account &amp; Erase All Records
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODALS & DIALOGS
+       ======================================================================== -->
+
+  <!-- 1. Authentication Modal (Sign In / Sign Up) -->
+  <div class="modal-backdrop" id="authModal" style="display: none;">
+    <div class="modal-dialog auth-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-header-brand">
+          <div class="auth-brand-badge">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3a4 4 0 0 0 0-8"/></svg>
+          </div>
+          <div>
+            <h3 class="modal-title" id="authModalTitle">Welcome to Hisaabo</h3>
+            <p class="modal-subtitle" id="authModalSubtitle">Sign in or create your verified account</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="authModal" aria-label="Close dialog">&times;</button>
       </div>
 
-      <div class="charts-grid">
-        <!-- 1. Expenses by Category -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3 class="chart-title">Expenses by Category</h3>
-          </div>
-          <div class="chart-canvas-container">
-            <canvas id="categoryChart"></canvas>
-          </div>
+      <div class="modal-body">
+        <div id="authErrorAlert" class="auth-error-alert" style="display: none;"></div>
+        <div id="authSuccessAlert" class="auth-success-alert" style="display: none;"></div>
+
+        <!-- Mode Switcher Tabs -->
+        <div class="auth-mode-tabs" id="authModeTabs" role="tablist">
+          <button type="button" id="authTabLogin" class="auth-mode-tab active" role="tab">Sign In</button>
+          <button type="button" id="authTabSignup" class="auth-mode-tab" role="tab">Sign Up</button>
         </div>
 
-        <!-- 2. Expenses by Payment Method -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3 class="chart-title">Payment Method Share</h3>
-          </div>
-          <div class="chart-canvas-container">
-            <canvas id="paymentChart"></canvas>
-          </div>
+        <!-- Google One-Tap / GIS Container -->
+        <div class="gsi-container" id="gsiContainer">
+          <button type="button" id="continueWithGoogleBtn" class="btn-google-auth btn-3d" style="width: 100%;">
+            <svg width="18" height="18" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+          <div id="gsiButtonWrapper" class="gsi-button-wrapper" style="margin-top: 0.5rem;"></div>
+          <div class="auth-divider"><span>OR CONTINUE WITH EMAIL</span></div>
         </div>
 
-        <!-- 3. Daily Spending Trend -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3 class="chart-title">Daily Spending Trend</h3>
-          </div>
-          <div class="chart-canvas-container">
-            <canvas id="dailyTrendChart"></canvas>
-          </div>
+        <!-- Log In Form -->
+        <div class="auth-view-panel active" id="authLoginView">
+          <form id="authLoginForm" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="loginGmailInput">Email Address *</label>
+              <input type="email" id="loginGmailInput" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
+              <div id="loginGmailError" class="input-field-error form-input-error" style="display: none;">Invalid Gmail address. Please enter a valid Gmail.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="loginPasswordInput">Password *</label>
+              <div class="password-input-wrap">
+                <input type="password" id="loginPasswordInput" class="form-control" placeholder="Enter password" required autocomplete="current-password">
+                <button type="button" class="btn-toggle-password" aria-label="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <div class="auth-options-row">
+              <label class="remember-label">
+                <input type="checkbox" id="loginRememberMe" checked>
+                <span>Remember session</span>
+              </label>
+              <button type="button" id="loginForgotPasswordLink" class="auth-link-subtle">Forgot password?</button>
+            </div>
+            <button type="submit" id="loginSubmitBtn" class="btn-gradient-neon btn-lg" style="width: 100%; justify-content: center; margin-top: 0.5rem;">
+              Sign In to Hisaabo
+            </button>
+            <div class="auth-switch-prompt" style="text-align: center; margin-top: 1.25rem; font-size: 0.9rem; color: var(--text-muted);">
+              <span>Don't have an account yet?</span>
+              <button type="button" id="loginToSignUpBtn" class="auth-link-highlight" style="background: none; border: none; color: var(--neon-cyan); font-weight: 700; cursor: pointer; text-decoration: underline; margin-left: 0.35rem;">Create Account / Sign Up</button>
+            </div>
+          </form>
         </div>
 
-        <!-- 4. Monthly Expense Comparison -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3 class="chart-title">Monthly Expense vs Budget</h3>
-          </div>
-          <div class="chart-canvas-container">
-            <canvas id="monthlyComparisonChart"></canvas>
-          </div>
+        <!-- Sign Up Form -->
+        <div class="auth-view-panel" id="authSignupView">
+          <form id="authSignupForm" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="signupNameInput">Full Name * <span class="badge-req">Compulsory</span></label>
+              <input type="text" id="signupNameInput" class="form-control" placeholder="e.g. MS Dhoni" required minlength="2">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="signupGmailInput">Email Address * <span class="badge-req">Required</span></label>
+              <input type="email" id="signupGmailInput" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
+              <div id="signupGmailError" class="input-field-error form-input-error" style="display: none;">Invalid Gmail address. Please enter a valid Gmail.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="signupPasswordInput">Password * <span class="badge-req">Min 6 chars</span></label>
+              <div class="password-input-wrap">
+                <input type="password" id="signupPasswordInput" class="form-control" placeholder="Create strong password" required minlength="6" autocomplete="new-password">
+                <button type="button" class="btn-toggle-password" aria-label="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="signupConfirmPasswordInput">Confirm Password * <span class="badge-req">Must match</span></label>
+              <div class="password-input-wrap">
+                <input type="password" id="signupConfirmPasswordInput" class="form-control" placeholder="Re-enter password" required minlength="6" autocomplete="new-password">
+                <button type="button" class="btn-toggle-password" aria-label="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <button type="submit" id="signupSubmitBtn" class="btn-gradient-neon btn-lg" style="width: 100%; justify-content: center; margin-top: 0.5rem;">
+              Create Account &amp; Enter Dashboard
+            </button>
+            <div class="auth-switch-prompt" style="text-align: center; margin-top: 1.25rem; font-size: 0.9rem; color: var(--text-muted);">
+              <span>Already have an account?</span>
+              <button type="button" id="signupToSignInBtn" class="auth-link-highlight" style="background: none; border: none; color: var(--neon-cyan); font-weight: 700; cursor: pointer; text-decoration: underline; margin-left: 0.35rem;">Sign In</button>
+            </div>
+          </form>
         </div>
       </div>
-    </section>
+    </div>
+  </div>
 
-    <!-- ======================================================================
-         VIEW 3: TOOLS & BACKUP
-         ====================================================================== -->
-    <section id="viewTools" class="tab-view-content">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Data Management & Tools
-        </h2>
+  <!-- 2. Forgot Password Modal -->
+  <div class="modal-backdrop" id="forgotPasswordModal" style="display: none;">
+    <div class="modal-dialog auth-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Reset Password</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="forgotPasswordModal">&times;</button>
       </div>
-
-      <div class="tools-grid">
-        <!-- Export Card -->
-        <div class="tool-card">
-          <div class="tool-card-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <div class="modal-body">
+        <div id="forgotPasswordError" class="auth-error-alert" style="display: none;"></div>
+        <div id="forgotPasswordSuccess" class="auth-success-alert" style="display: none;"></div>
+        <form id="forgotPasswordForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="forgotEmailInput">Account Email Address *</label>
+            <input type="email" id="forgotEmailInput" class="form-control" placeholder="yourname@gmail.com" required>
           </div>
-          <h3 class="tool-card-title">Export to CSV</h3>
-          <p class="tool-card-desc">Download all your logged expenses for the active month into a clean CSV spreadsheet.</p>
-          <button id="exportCsvBtn" class="btn-primary" style="width: 100%; justify-content: center;">
-            Download CSV
-          </button>
-        </div>
-
-        <!-- Import Card -->
-        <div class="tool-card">
-          <div class="tool-card-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div class="form-group">
+            <label class="form-label" for="forgotNewPasswordInput">New Password * (min 6 chars)</label>
+            <div class="password-input-wrap">
+              <input type="password" id="forgotNewPasswordInput" class="form-control" minlength="6" required>
+              <button type="button" class="btn-toggle-password" aria-label="Toggle password visibility">👁️</button>
+            </div>
           </div>
-          <h3 class="tool-card-title">Import from CSV</h3>
-          <p class="tool-card-desc">Restore or bulk import expenses from Excel or another spreadsheet.</p>
-          <button id="importCsvBtn" class="btn-secondary" style="width: 100%; justify-content: center;">
-            Upload CSV File
-          </button>
-        </div>
-
-        <!-- Demo Data Card -->
-        <div class="tool-card">
-          <div class="tool-card-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          <div class="form-group">
+            <label class="form-label" for="forgotConfirmPasswordInput">Confirm New Password *</label>
+            <div class="password-input-wrap">
+              <input type="password" id="forgotConfirmPasswordInput" class="form-control" minlength="6" required>
+              <button type="button" class="btn-toggle-password" aria-label="Toggle password visibility">👁️</button>
+            </div>
           </div>
-          <h3 class="tool-card-title">Sample Demo Data</h3>
-          <p class="tool-card-desc">Load realistic sample purchases (Hostel, Swiggy, Metro, Bills) to explore all features.</p>
-          <button id="loadDemoDataBtn" class="btn-secondary" style="width: 100%; justify-content: center;">
-            Reload Demo Data
+          <button type="submit" class="btn-gradient-neon btn-lg" style="width: 100%; justify-content: center;">
+            Update &amp; Set New Password
           </button>
-        </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
-        <!-- Google Account Card -->
-        <div class="tool-card">
-          <div class="tool-card-icon" style="color: #4285F4; background: rgba(66, 133, 244, 0.12);">
+  <!-- 2B. Google Account Sign-In / Sign-Up Modal -->
+  <div class="modal-backdrop" id="googleAccountModal" style="display: none;">
+    <div class="modal-dialog auth-dialog" style="max-width: 460px;">
+      <div class="modal-header" style="border-bottom: none; padding-bottom: 0.5rem;">
+        <div class="modal-header-brand">
+          <div class="google-dialog-icon">
             <svg width="24" height="24" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
               <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
@@ -440,463 +1368,374 @@
               <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
             </svg>
           </div>
-          <h3 class="tool-card-title" id="toolsAccountTitle">Google Account</h3>
-          <p class="tool-card-desc" id="toolsAccountDesc">Sign in with your Gmail to personalize expense records and enable multi-device identity.</p>
-          <button id="toolsAccountBtn" class="btn-secondary" style="width: 100%; justify-content: center;">
-            Sign in with Gmail
-          </button>
-        </div>
-
-
-        <!-- Gmail Budget Milestone Alerts Card (50%, 90%, 100%) -->
-        <div class="tool-card email-alerts-card">
-          <div class="tool-card-icon" style="color: #ea4335; background: rgba(234, 67, 53, 0.12);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          </div>
-          <h3 class="tool-card-title">Gmail Budget Alerts</h3>
-          <p class="tool-card-desc">Automated email notifications delivered directly to your inbox when monthly spending crosses 50%, 90%, and 100%.</p>
-          <div class="tools-alert-meta">
-            <div class="alert-recipient-row">
-              <span class="recipient-label">Recipient:</span>
-              <span class="meta-email" id="toolsAlertEmailDisplay">user@example.com</span>
-            </div>
-            <div class="alert-recipient-row">
-              <span class="recipient-label">Delivery Mode:</span>
-              <span class="meta-status-tag" id="toolsSmtpStatusTag">Setup Required</span>
-            </div>
-            <div class="milestones-pill-row">
-              <span class="milestone-status-pill" id="toolsPill50">50% Halfway</span>
-              <span class="milestone-status-pill" id="toolsPill90">90% Warning</span>
-              <span class="milestone-status-pill" id="toolsPill100">100% Limit</span>
-            </div>
-          </div>
-          <div class="tools-mail-actions-row">
-            <button type="button" id="toolsConfigureMailBtn" class="btn-primary" style="flex: 1; justify-content: center; font-size: 0.82rem;">
-              Configure Gmail Delivery
-            </button>
-            <button type="button" id="toolsSendTestEmailBtn" class="btn-secondary" style="flex: 1; justify-content: center; font-size: 0.82rem;">
-              Send Test Alert
-            </button>
-          </div>
-        </div>
-
-        <!-- Clear Data Card -->
-        <div class="tool-card danger-card">
-          <div class="tool-card-icon" style="color: var(--danger); background: var(--danger-bg);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-          </div>
-          <h3 class="tool-card-title">Clear Expenses</h3>
-          <p class="tool-card-desc">Reset the current month or wipe all saved transaction records from the browser.</p>
-          <button id="clearDataTriggerBtn" class="btn-danger-outline" style="width: 100%; justify-content: center;">
-            Clear Expense Records
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Mobile Floating Action Button (FAB) -->
-    <button class="fab-add-btn trigger-add-expense" aria-label="Add Expense">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    </button>
-  </div>
-
-  <!-- ==========================================================================
-       MODALS: Streamlined & 1-Tap Friendly
-       ========================================================================== -->
-
-  <!-- Sign in & Entrance Gate Modal (Strict Email Validation) -->
-  <div class="modal-backdrop" id="authModal">
-    <div class="modal-dialog auth-dialog" style="max-width: 480px;">
-      <div class="modal-header">
-        <div class="modal-header-brand">
-          <div class="auth-brand-badge">
-            <svg width="22" height="22" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
-              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-            </svg>
-          </div>
           <div>
-            <h3 class="modal-title" id="authModalTitle">Welcome to Hisabo</h3>
-            <p class="modal-subtitle" id="authModalSubtitle">Real Gmail address &amp; compulsory Full Name required</p>
+            <h3 class="modal-title" id="googleModalTitle" style="font-size: 1.2rem;">Sign in with Google</h3>
+            <p class="modal-subtitle" id="googleModalSubtitle">Choose an account to continue to Hisaabo</p>
           </div>
         </div>
-        <button class="modal-close-btn" id="authModalCloseBtn" data-close-modal="authModal" aria-label="Close dialog">&times;</button>
+        <button type="button" class="modal-close-btn" data-close-modal="googleAccountModal" aria-label="Close">&times;</button>
       </div>
 
-      <div class="modal-body">
-        <!-- Entry Gate Strict Banner when unauthenticated -->
-        <div class="gate-security-banner" id="entranceGateBanner">
-          <div class="gate-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </div>
-          <div class="gate-text">
-            <strong>Strict Gmail Verification Gate:</strong> Real <strong>@gmail.com</strong> accounts verified via 6-digit email code.
-          </div>
-        </div>
+      <div class="modal-body" style="padding-top: 0.5rem;">
+        <div id="googleAuthError" class="auth-error-alert" style="display: none;"></div>
 
-        <!-- Global Alert Boxes for Auth -->
-        <div id="authErrorAlert" class="auth-error-alert" style="display: none;"></div>
-        <div id="authSuccessAlert" class="auth-success-alert" style="display: none;"></div>
-
-        <!-- Segmented Mode Switcher -->
-        <div class="auth-mode-tabs" id="authModeTabs" role="tablist" aria-label="Authentication Mode">
-          <button type="button" id="authTabLogin" class="auth-mode-tab active" role="tab" aria-selected="true">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            <span>Log In</span>
+        <!-- Fast One-Click Google Accounts List -->
+        <div class="google-accounts-list">
+          <button type="button" class="google-account-card" id="googleQuickAccountBtn1" data-email="dishusony@gmail.com" data-name="Disha Sony">
+            <div class="google-avatar-circle" style="background: linear-gradient(135deg, #4285F4, #34A853);">DS</div>
+            <div class="google-account-details">
+              <div class="google-account-name">Disha Sony</div>
+              <div class="google-account-email">dishusony@gmail.com</div>
+            </div>
+            <div class="google-account-badge" id="googleBadge1">One-Tap</div>
           </button>
-          <button type="button" id="authTabSignup" class="auth-mode-tab" role="tab" aria-selected="false">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-            <span>Sign Up</span>
+
+          <button type="button" class="google-account-card" id="googleQuickAccountBtn2" data-email="student.user@gmail.com" data-name="Student Learner">
+            <div class="google-avatar-circle" style="background: linear-gradient(135deg, #a855f7, #ec4899);">SL</div>
+            <div class="google-account-details">
+              <div class="google-account-name">Student Learner</div>
+              <div class="google-account-email">student.user@gmail.com</div>
+            </div>
+            <div class="google-account-badge" id="googleBadge2">One-Tap</div>
           </button>
         </div>
 
-        <!-- Official Google Sign-In Container (GSI) -->
-        <div class="gsi-container" id="gsiContainer">
-          <div id="gsiButtonWrapper" class="gsi-button-wrapper"></div>
-          <div class="auth-divider" id="gsiDivider" style="display: none;"><span>OR ENTER WITH GMAIL</span></div>
-        </div>
+        <div class="auth-divider"><span>OR USE ANOTHER GOOGLE ACCOUNT</span></div>
 
-        <!-- ================================================================
-             VIEW 1: Log In View (Verified Gmail + Password)
-             ================================================================ -->
-        <div class="auth-view-panel active" id="authLoginView">
-          <form id="authLoginForm" class="gmail-form" novalidate>
-            <div class="form-group">
-              <label class="form-label" for="loginGmailInput">
-                Real Gmail Address * <span class="badge-required">Gmail Only</span>
-              </label>
-              <div class="input-with-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                <input type="email" id="loginGmailInput" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
-              </div>
-              <div id="loginGmailError" class="input-field-error" style="display: none;">Invalid Gmail address. Please enter a valid Gmail.</div>
-              <span class="input-subhint">Must be a valid Gmail address (@gmail.com).</span>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="loginPasswordInput">
-                Password * <span class="badge-required">Compulsory</span>
-              </label>
-              <div class="input-with-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                <input type="password" id="loginPasswordInput" class="form-control" placeholder="Enter your password" required autocomplete="current-password">
-              </div>
-            </div>
-
-            <button type="submit" id="loginSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 0.95rem;">
-              Log In to Hisabo
-            </button>
-
-            <div class="auth-mode-toggle-wrap">
-              <span>Don't have an account?</span>
-              <button type="button" id="toggleToSignupBtn" class="auth-toggle-link-btn">Create Account (Sign Up)</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- ================================================================
-             VIEW 2: Sign Up View (Full Name + Gmail + Password)
-             ================================================================ -->
-        <div class="auth-view-panel" id="authSignupView">
-          <form id="authSignupForm" class="gmail-form" novalidate>
-            <div class="form-group">
-              <label class="form-label" for="signupNameInput">
-                Full Name * <span class="badge-required">Compulsory</span>
-              </label>
-              <div class="input-with-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <input type="text" id="signupNameInput" class="form-control" placeholder="e.g. MS Dhoni" autocomplete="name" required minlength="2">
-              </div>
-              <span class="input-subhint">Full Name is compulsory (minimum 2 characters, letters required).</span>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="signupGmailInput">
-                Real Gmail Address * <span class="badge-required">Gmail Only</span>
-              </label>
-              <div class="input-with-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                <input type="email" id="signupGmailInput" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
-              </div>
-              <div id="signupGmailError" class="input-field-error" style="display: none;">Invalid Gmail address. Please enter a valid Gmail.</div>
-              <span class="input-subhint">Must be a valid Gmail address (@gmail.com).</span>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="signupPasswordInput">
-                Create Password * <span class="badge-required">Min 6 chars</span>
-              </label>
-              <div class="input-with-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                <input type="password" id="signupPasswordInput" class="form-control" placeholder="Create a strong password" required minlength="6" autocomplete="new-password">
-              </div>
-              <span class="input-subhint">Stored securely using salted cryptographic hashing (scrypt).</span>
-            </div>
-
-            <button type="submit" id="signupSubmitBtn" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 0.95rem;">
-              Create Account &amp; Log In
-            </button>
-
-            <div class="auth-mode-toggle-wrap">
-              <span>Already have an account?</span>
-              <button type="button" id="toggleToLoginBtn" class="auth-toggle-link-btn">Log In to Your Account</button>
-            </div>
-          </form>
-        </div>
-
-      </div>
-
-      <div class="modal-footer" style="justify-content: center;">
-        <span class="auth-security-notice">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          100% Private. Your credentials & data remain locally secured in your browser.
-        </span>
-        <button type="button" id="toggleClientIdConfigBtn" class="link-btn-subtle" style="font-size: 0.7rem; margin-top: 0.2rem;">
-          <span>Google OAuth Client ID (Optional)</span>
-        </button>
-        <div id="clientIdConfigBox" class="client-id-config-box" style="display: none; width: 100%; margin-top: 0.35rem;">
-          <p class="client-id-hint" style="margin-bottom: 0.35rem;">Enter your Google Cloud OAuth 2.0 Web Client ID to enable One-Tap Google sign-in.</p>
-          <div class="client-id-input-row">
-            <input type="text" id="googleClientIdInput" class="form-control" placeholder="e.g. 123456...apps.googleusercontent.com">
-            <button type="button" id="saveClientIdBtn" class="btn-secondary btn-sm">Save</button>
+        <form id="googleCustomAccountForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="googleCustomEmailInput">Google / Gmail Address *</label>
+            <input type="email" id="googleCustomEmailInput" class="form-control" placeholder="yourname@gmail.com" required>
           </div>
+          <div class="form-group">
+            <label class="form-label" for="googleCustomNameInput">Your Full Name (Optional)</label>
+            <input type="text" id="googleCustomNameInput" class="form-control" placeholder="e.g. MS Dhoni">
+          </div>
+          <button type="submit" id="googleCustomSubmitBtn" class="btn-gradient-neon btn-lg" style="width: 100%; justify-content: center; margin-top: 0.5rem;">
+            Sign In with Google
+          </button>
+        </form>
+
+        <div class="google-oauth-trust-note" style="margin-top: 1.25rem; font-size: 0.76rem; color: var(--text-muted); text-align: center; line-height: 1.45;">
+          🔒 Secured via Google Identity Services &amp; authenticated session tokens.
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Configure Real Gmail SMTP Modal -->
-  <div class="modal-backdrop" id="mailConfigModal">
-    <div class="modal-dialog" style="max-width: 500px;">
+  <!-- 3. Add / Edit Expense Modal (Callable from anywhere) -->
+  <div class="modal-backdrop" id="expenseModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 520px;">
       <div class="modal-header">
-        <div class="modal-header-brand">
-          <div class="auth-brand-badge" style="background: rgba(234, 67, 53, 0.12); color: #ea4335;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          </div>
-          <div>
-            <h3 class="modal-title">Activate Real Gmail Alerts</h3>
-            <p class="modal-subtitle">Enable live inbox delivery for 50%, 90%, and 100% budget alerts</p>
-          </div>
-        </div>
-        <button class="modal-close-btn" data-close-modal="mailConfigModal" aria-label="Close dialog">&times;</button>
+        <h3 class="modal-title" id="expenseModalTitle">Add Expense</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="expenseModal">&times;</button>
       </div>
-      <form id="mailConfigForm" novalidate>
+      <form id="modalExpenseForm" novalidate>
         <div class="modal-body">
-          <div class="mail-instruction-box">
-            <div class="instruction-header">
-              <span class="badge-step">Required for Real Inbox Delivery</span>
-              <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" class="app-pass-link">
-                <span>Google App Passwords</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
-            </div>
-            <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.4rem 0 0.5rem 0; line-height: 1.4;">
-              Google prohibits raw account passwords. To send real emails, generate a free <strong>16-character App Password</strong>:
-            </p>
-            <ol class="app-pass-steps">
-              <li>Turn on <strong>2-Step Verification</strong> in your Google Account.</li>
-              <li>Open <strong>App Passwords</strong> and name it <strong>Hisabo</strong>.</li>
-              <li>Paste the 16 characters below (spaces are automatically cleaned).</li>
-            </ol>
-          </div>
-
-          <div id="mailConfigError" class="auth-error-alert" style="display: none;"></div>
-
           <div class="form-group">
-            <label class="form-label" for="cfgSenderEmail">Sender Gmail Address *</label>
-            <div class="input-with-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <input type="email" id="cfgSenderEmail" class="form-control" placeholder="yourname@gmail.com" required autocomplete="email">
+            <label class="form-label" for="modalExpAmount">Amount (₹) *</label>
+            <div class="amount-hero-input-wrap">
+              <span class="currency-symbol-hero">₹</span>
+              <input type="number" id="modalExpAmount" class="amount-hero-input" placeholder="0.00" step="any" min="0.01" required>
             </div>
-            <span class="input-subhint">This Gmail account will authenticate and send the alert emails to your inbox.</span>
           </div>
-
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="modalExpItem">What did you buy? *</label>
+              <input type="text" id="modalExpItem" class="form-control" placeholder="e.g. Metro Card, Swiggy" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="modalExpDate">Date *</label>
+              <input type="date" id="modalExpDate" class="form-control" required>
+            </div>
+          </div>
           <div class="form-group">
-            <label class="form-label" for="cfgAppPassword">16-Character Google App Password *</label>
-            <div class="input-with-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <input type="password" id="cfgAppPassword" class="form-control" placeholder="e.g. abcd efgh ijkl mnop" required autocomplete="off">
-            </div>
-            <span class="input-subhint">Stored securely in your local environment file (.env). Never committed to GitHub.</span>
+            <label class="form-label">Category *</label>
+            <div class="category-pills-selector" id="modalCategoryPills"></div>
+            <input type="hidden" id="modalExpCategoryHidden" value="Food">
           </div>
-
-          <div class="form-check-group" style="margin-top: 0.85rem;">
-            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-primary); cursor: pointer;">
-              <input type="checkbox" id="cfgSendTestNow" checked style="accent-color: var(--primary);">
-              <span>Send a test verification email to my inbox immediately</span>
-            </label>
+          <div class="form-group">
+            <label class="form-label">Payment Method *</label>
+            <div class="payment-pills-selector" id="modalPaymentPills"></div>
+            <input type="hidden" id="modalExpPaymentHidden" value="UPI">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="modalExpNotes">Notes (Optional)</label>
+            <input type="text" id="modalExpNotes" class="form-control" placeholder="Extra note">
           </div>
         </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn-secondary" data-close-modal="mailConfigModal">Cancel</button>
-          <button type="submit" id="saveMailConfigBtn" class="btn-primary">
-            Activate &amp; Verify Delivery
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Add / Edit Expense Modal -->
-  <div class="modal-backdrop" id="expenseModal">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h3 class="modal-title" id="expenseModalTitle">Add New Expense</h3>
-        <button class="modal-close-btn" data-close-modal="expenseModal" aria-label="Close dialog">&times;</button>
-      </div>
-      <form id="expenseForm" novalidate>
-        <div class="modal-body">
-          <!-- Big Prominent Amount Field -->
-          <div class="form-group">
-            <label class="form-label" for="expenseAmount">Amount (₹) *</label>
-            <div class="amount-input-wrap">
-              <span class="amount-currency-symbol">₹</span>
-              <input type="number" id="expenseAmount" name="expenseAmount" class="form-control amount-large-input" placeholder="0.00" step="0.01" min="0.01" required autofocus>
-            </div>
-          </div>
-
-          <!-- Item Name & Date in 2 columns -->
-          <div class="form-row-2">
-            <div class="form-group" style="flex: 2;">
-              <label class="form-label" for="expenseItem">What did you buy? *</label>
-              <input type="text" id="expenseItem" name="expenseItem" class="form-control" placeholder="e.g. Zomato Dinner, Metro, Coffee" required autocomplete="off">
-            </div>
-            <div class="form-group" style="flex: 1;">
-              <label class="form-label" for="expenseDate">Date *</label>
-              <input type="date" id="expenseDate" name="expenseDate" class="form-control">
-            </div>
-          </div>
-
-          <!-- 1-Tap Category Selector Pills -->
-          <div class="form-group">
-            <label class="form-label">Category * (tap to select)</label>
-            <div class="pill-selector-grid" id="modalCategoryPills">
-              <!-- Dynamically populated interactive pills in ui.js -->
-            </div>
-            <!-- Hidden native select for form data -->
-            <select id="expenseCategory" name="expenseCategory" style="display: none;"></select>
-          </div>
-
-          <!-- 1-Tap Payment Method Selector Pills -->
-          <div class="form-group">
-            <label class="form-label">Payment Method * (tap to select)</label>
-            <div class="pill-selector-grid-compact" id="modalPaymentPills">
-              <!-- Dynamically populated interactive pills in ui.js -->
-            </div>
-            <!-- Hidden native select for form data -->
-            <select id="expensePayment" name="expensePayment" style="display: none;"></select>
-          </div>
-
-          <!-- Notes (Optional) -->
-          <div class="form-group">
-            <label class="form-label" for="expenseNotes">Notes / Description (Optional)</label>
-            <input type="text" id="expenseNotes" name="expenseNotes" class="form-control" placeholder="Add extra detail, who you paid, etc.">
-          </div>
-        </div>
-
         <div class="modal-footer">
           <button type="button" class="btn-secondary" data-close-modal="expenseModal">Cancel</button>
-          <button type="submit" id="expenseSubmitBtn" class="btn-primary" style="padding: 0.75rem 1.8rem;">Save Expense</button>
+          <button type="submit" id="saveExpenseModalBtn" class="btn-gradient-neon">Save Expense</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Set Monthly Budget Modal -->
-  <div class="modal-backdrop" id="budgetModal">
+  <!-- 4. Add / Edit Income / Budget Modal -->
+  <div class="modal-backdrop" id="incomeModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="incomeModalTitle">Add Budget / Pocket Money</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="incomeModal">&times;</button>
+      </div>
+      <form id="incomeForm" novalidate>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="incomeAmount">Budget Amount (₹) *</label>
+            <div class="amount-hero-input-wrap">
+              <span class="currency-symbol-hero text-neon-green">₹</span>
+              <input type="number" id="incomeAmount" class="amount-hero-input text-neon-green" placeholder="0.00" step="0.01" min="0.01" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="incomeSource">Source (Pocket Money, Allowance, Stipend) *</label>
+            <input type="text" id="incomeSource" class="form-control" placeholder="e.g. Pocket Money, Parents, Stipend, Part-time" required>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="incomeDate">Date Received *</label>
+              <input type="date" id="incomeDate" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="incomePayment">Received Via</label>
+              <select id="incomePayment" class="form-control">
+                <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer / NetBanking</option>
+                <option value="Cheque">Cheque</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="incomeNotes">Notes (Optional)</label>
+            <input type="text" id="incomeNotes" class="form-control" placeholder="e.g. For college semester, mess fees, etc.">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="incomeModal">Cancel</button>
+          <button type="submit" id="saveIncomeBtn" class="btn-gradient-neon">Save Budget</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. Monthly Budget Modal -->
+  <div class="modal-backdrop" id="budgetModal" style="display: none;">
     <div class="modal-dialog" style="max-width: 440px;">
       <div class="modal-header">
         <h3 class="modal-title">Set Monthly Budget</h3>
-        <button class="modal-close-btn" data-close-modal="budgetModal" aria-label="Close dialog">&times;</button>
+        <button type="button" class="modal-close-btn" data-close-modal="budgetModal">&times;</button>
       </div>
       <form id="budgetForm">
         <div class="modal-body">
-          <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
-            Set your target spending budget for <strong id="budgetMonthLabel" style="color: var(--text-primary);">September 2026</strong>.
+          <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Set your target spending limit for <strong id="budgetMonthLabel" style="color: var(--text-primary);">Current Month</strong>.
           </p>
           <div class="form-group">
-            <label class="form-label" for="budgetAmountInput">Monthly Budget Limit (₹) *</label>
-            <div class="amount-input-wrap">
-              <span class="amount-currency-symbol">₹</span>
-              <input type="number" id="budgetAmountInput" class="form-control amount-large-input" placeholder="25000" min="0" step="100" required>
+            <label class="form-label" for="overallBudgetLimitInput">Monthly Limit (₹) *</label>
+            <div class="amount-hero-input-wrap">
+              <span class="currency-symbol-hero">₹</span>
+              <input type="number" id="overallBudgetLimitInput" data-alias="budgetAmountInput" class="amount-hero-input" placeholder="5000" min="0" step="any" required>
             </div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn-secondary" data-close-modal="budgetModal">Cancel</button>
-          <button type="submit" class="btn-primary">Update Budget</button>
+          <button type="submit" id="saveMonthlyBudgetBtn" class="btn-gradient-neon">Save Budget Limit</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Delete Confirmation Modal -->
-  <div class="modal-backdrop" id="deleteConfirmModal">
+  <!-- 6. Category Budget Modal -->
+  <div class="modal-backdrop" id="categoryBudgetModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Set Category Budget</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="categoryBudgetModal">&times;</button>
+      </div>
+      <form id="categoryBudgetForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="catBudgetCategorySelect">Category *</label>
+            <select id="catBudgetCategorySelect" data-alias="catBudgetSelect" class="form-control" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="catBudgetLimitInput">Spending Cap (₹) *</label>
+            <input type="number" id="catBudgetLimitInput" data-alias="catBudgetAmount" class="form-control" placeholder="e.g. 8000" min="1" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="categoryBudgetModal">Cancel</button>
+          <button type="submit" class="btn-gradient-neon">Set Category Limit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7. Custom Category Modal -->
+  <div class="modal-backdrop" id="customCategoryModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Custom Category</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="customCategoryModal">&times;</button>
+      </div>
+      <form id="customCategoryForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="customCatName">Category Name *</label>
+            <input type="text" id="customCatName" class="form-control" placeholder="e.g. Crypto, Gym, Pets" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Category Accent Color</label>
+            <div class="color-swatches-row" id="customCatColorSwatches">
+              <button type="button" class="color-swatch active" data-color="#00f0ff" style="background:#00f0ff;"></button>
+              <button type="button" class="color-swatch" data-color="#38bdf8" style="background:#38bdf8;"></button>
+              <button type="button" class="color-swatch" data-color="#a855f7" style="background:#a855f7;"></button>
+              <button type="button" class="color-swatch" data-color="#ec4899" style="background:#ec4899;"></button>
+              <button type="button" class="color-swatch" data-color="#10b981" style="background:#10b981;"></button>
+              <button type="button" class="color-swatch" data-color="#f59e0b" style="background:#f59e0b;"></button>
+            </div>
+            <input type="hidden" id="customCatColorHidden" value="#00f0ff">
+            <input type="hidden" id="customCatIcon" value="tag">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="customCategoryModal">Cancel</button>
+          <button type="submit" class="btn-gradient-neon">Create Category</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 8. Savings Goal Modal -->
+  <div class="modal-backdrop" id="goalModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="goalModalTitle">Create Savings Goal</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="goalModal">&times;</button>
+      </div>
+      <form id="goalForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="goalNameInput">Goal Name *</label>
+            <input type="text" id="goalNameInput" class="form-control" placeholder="e.g. Emergency Fund, New Laptop" required>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="goalTargetInput">Target Amount (₹) *</label>
+              <input type="number" id="goalTargetInput" class="form-control" placeholder="100000" min="1" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="goalCurrentInput">Initial Saved (₹)</label>
+              <input type="number" id="goalCurrentInput" class="form-control" placeholder="0" min="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="goalDeadlineInput">Target Deadline (Optional)</label>
+            <input type="date" id="goalDeadlineInput" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="goalModal">Cancel</button>
+          <button type="submit" class="btn-gradient-neon">Save Goal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 9. Add Funds to Goal Modal -->
+  <div class="modal-backdrop" id="addGoalFundsModal" style="display: none;">
     <div class="modal-dialog" style="max-width: 420px;">
       <div class="modal-header">
-        <h3 class="modal-title">Delete Expense?</h3>
-        <button class="modal-close-btn" data-close-modal="deleteConfirmModal" aria-label="Close dialog">&times;</button>
+        <h3 class="modal-title">Contribute to Goal</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="addGoalFundsModal">&times;</button>
+      </div>
+      <form id="addGoalFundsForm">
+        <input type="hidden" id="addFundsGoalId">
+        <div class="modal-body">
+          <p id="addFundsGoalName" style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.75rem;">Goal Name</p>
+          <div class="form-group">
+            <label class="form-label" for="addFundsAmountInput">Amount to Add (₹) *</label>
+            <input type="number" id="addFundsAmountInput" class="form-control" placeholder="e.g. 5000" min="1" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="addGoalFundsModal">Cancel</button>
+          <button type="submit" class="btn-gradient-neon">Add Funds</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 10. Delete Confirmation Dialog -->
+  <div class="modal-backdrop" id="deleteConfirmModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Confirm Deletion</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="deleteConfirmModal">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-          Are you sure you want to delete this expense?
+        <p id="deleteConfirmMessage" style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Are you sure you want to delete this record? This action cannot be undone.
         </p>
-        <div style="background: var(--bg-input); padding: 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-          <div style="font-weight: 700; color: var(--text-primary);" id="deleteItemName">Item Name</div>
-          <div style="font-size: 1.15rem; font-weight: 800; color: var(--danger); margin-top: 2px;" id="deleteItemAmount">₹0.00</div>
+        <div class="delete-item-preview glass-panel">
+          <div id="deleteItemTitle" style="font-weight: 700; color: var(--text-primary);">Item Name</div>
+          <div id="deleteItemAmount" style="font-size: 1.15rem; font-weight: 800; color: var(--danger); margin-top: 4px;">₹0.00</div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-secondary" data-close-modal="deleteConfirmModal">Cancel</button>
-        <button type="button" id="confirmDeleteBtn" class="btn-danger-outline">Yes, Delete</button>
+        <button type="button" id="confirmDeleteActionBtn" class="btn-danger-outline">Yes, Delete</button>
       </div>
     </div>
   </div>
 
-  <!-- Clear Month / All Modal -->
-  <div class="modal-backdrop" id="clearConfirmModal">
-    <div class="modal-dialog" style="max-width: 460px;">
+  <!-- 11. Gmail SMTP Configuration Modal -->
+  <div class="modal-backdrop" id="mailConfigModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 500px;">
       <div class="modal-header">
-        <h3 class="modal-title">Clear Expense Data</h3>
-        <button class="modal-close-btn" data-close-modal="clearConfirmModal" aria-label="Close dialog">&times;</button>
+        <h3 class="modal-title">Configure Gmail Alerts</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="mailConfigModal">&times;</button>
       </div>
-      <div class="modal-body">
-        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
-          Select whether to clear expenses only for the selected active month or wipe all historical tracking data.
-        </p>
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <button type="button" id="confirmClearMonthBtn" class="btn-secondary" style="justify-content: center; padding: 0.75rem;">
-            Clear Active Month Expenses
-          </button>
-          <button type="button" id="confirmClearAllBtn" class="btn-danger-outline" style="justify-content: center; padding: 0.75rem;">
-            Wipe All Historical Records
-          </button>
+      <form id="mailConfigForm">
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Provide your Gmail address and 16-character Google App Password to enable live delivery for 50%, 90%, and 100% budget alerts.
+          </p>
+          <div class="form-group">
+            <label class="form-label" for="cfgSenderEmail">Sender Gmail Address *</label>
+            <input type="email" id="cfgSenderEmail" class="form-control" placeholder="yourname@gmail.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cfgAppPassword">16-Character Google App Password *</label>
+            <input type="password" id="cfgAppPassword" class="form-control" placeholder="abcd efgh ijkl mnop" required>
+          </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-close-modal="clearConfirmModal">Cancel</button>
-      </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" data-close-modal="mailConfigModal">Cancel</button>
+          <button type="submit" class="btn-gradient-neon">Verify &amp; Save</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <!-- CSV Import Modal -->
-  <div class="modal-backdrop" id="importModal">
-    <div class="modal-dialog">
+  <!-- 12. CSV Import Modal -->
+  <div class="modal-backdrop" id="importModal" style="display: none;">
+    <div class="modal-dialog" style="max-width: 480px;">
       <div class="modal-header">
         <h3 class="modal-title">Import Expenses from CSV</h3>
-        <button class="modal-close-btn" data-close-modal="importModal" aria-label="Close dialog">&times;</button>
+        <button type="button" class="modal-close-btn" data-close-modal="importModal">&times;</button>
       </div>
       <div class="modal-body">
         <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-          Choose a CSV file containing your expenses with columns: <code>Date, Item, Amount, Payment Method, Category, Notes</code>.
+          Select a CSV spreadsheet with columns: <code>Date, Item, Amount, Category, Payment Method, Notes</code>.
         </p>
-        <label for="csvFileInput" class="dropzone-box" style="display: block;">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--primary); margin: 0 auto 0.5rem auto;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <div style="font-weight: 600; margin-bottom: 0.25rem;">Click to choose CSV file</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">Compatible with Excel, Google Sheets, or Hisabo</div>
+        <label for="csvFileInput" class="csv-dropzone-box">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 0.5rem auto;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div>Click to choose CSV file</div>
           <input type="file" id="csvFileInput" accept=".csv,text/csv" style="display: none;">
         </label>
       </div>
@@ -906,80 +1745,10 @@
     </div>
   </div>
 
-  <!-- Theme Palette Modal -->
-  <div class="modal-backdrop" id="themeModal">
-    <div class="modal-dialog" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3 class="modal-title">Choose Visual Theme</h3>
-        <button class="modal-close-btn" data-close-modal="themeModal" aria-label="Close dialog">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1rem;">
-          Select an aesthetic visual theme for Hisabo. Changes apply instantly.
-        </p>
-        <div class="theme-palette-grid">
-          <!-- 1. Emerald Wealth -->
-          <button type="button" class="theme-card" data-set-theme="emerald">
-            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #050d0a 50%, #10b981 50%); border-color: #10b981;"></div>
-            <div class="theme-info">
-              <div class="theme-name">💎 Emerald Wealth <span style="font-size:0.75rem; color:#10b981; font-weight:600;">(Default)</span></div>
-              <div class="theme-desc">Deep jade obsidian with radiant emerald & golden accents</div>
-            </div>
-            <div class="theme-check-icon">✓</div>
-          </button>
-
-          <!-- 2. Midnight Cyber -->
-          <button type="button" class="theme-card" data-set-theme="midnight">
-            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #070913 50%, #6366f1 50%); border-color: #6366f1;"></div>
-            <div class="theme-info">
-              <div class="theme-name">🌌 Midnight Cyber</div>
-              <div class="theme-desc">Deep space obsidian with electric neon indigo & violet glow</div>
-            </div>
-            <div class="theme-check-icon">✓</div>
-          </button>
-
-          <!-- 3. Royal Amethyst -->
-          <button type="button" class="theme-card" data-set-theme="amethyst">
-            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #0b0714 50%, #a855f7 50%); border-color: #a855f7;"></div>
-            <div class="theme-info">
-              <div class="theme-name">🍇 Royal Amethyst</div>
-              <div class="theme-desc">Imperial velvet purple with neon magenta highlights</div>
-            </div>
-            <div class="theme-check-icon">✓</div>
-          </button>
-
-          <!-- 4. Ocean Sapphire -->
-          <button type="button" class="theme-card" data-set-theme="ocean">
-            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #040d1a 50%, #0284c7 50%); border-color: #0284c7;"></div>
-            <div class="theme-info">
-              <div class="theme-name">🌊 Ocean Sapphire</div>
-              <div class="theme-desc">Marine abyss navy with electric cyan & sky blue</div>
-            </div>
-            <div class="theme-check-icon">✓</div>
-          </button>
-
-          <!-- 5. Pearl Minimal -->
-          <button type="button" class="theme-card" data-set-theme="pearl">
-            <div class="theme-swatch-circle" style="background: linear-gradient(135deg, #f8fafc 50%, #059669 50%); border-color: #cbd5e1;"></div>
-            <div class="theme-info">
-              <div class="theme-name">☀️ Pearl Minimal</div>
-              <div class="theme-desc">Crisp, clean studio light mode with frosted glass cards</div>
-            </div>
-            <div class="theme-check-icon">✓</div>
-          </button>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn-primary" data-close-modal="themeModal" style="width: 100%; justify-content: center;">Apply & Done</button>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- Toast Notification Container -->
+  <!-- Global Toast Notification Container -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <!-- Main Application Script (ES Module) -->
-  <script type="module" src="js/app.js"></script>
+  <!-- Main Coordinator ES Module -->
+  <script type="module" src="js/app.js?v=3.2"></script>
 </body>
 </html>

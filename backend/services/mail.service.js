@@ -504,8 +504,8 @@ export async function sendTestEmail({ toEmail, userName = 'Hisabo User' }) {
 
   const currentMonthKey = new Date().toISOString().substring(0, 7);
   const testThreshold = 50;
-  const testBudget = 25000;
-  const testSpent = 12500;
+  const testBudget = 5000;
+  const testSpent = 2500;
 
   if (!isGmailConfigured()) {
     console.log(`[Hisabo Mail] ℹ️ SIMULATED TEST EMAIL to ${toEmail}. Configure GMAIL_USER and GMAIL_APP_PASSWORD in .env to send real emails.`);

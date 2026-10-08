@@ -43,7 +43,9 @@ db.exec(`
     name TEXT,
     picture TEXT,
     provider TEXT DEFAULT 'google',
+    google_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -122,6 +124,78 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_signup_verif_email ON signup_verifications(email);
+
+  CREATE TABLE IF NOT EXISTS income (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    source TEXT NOT NULL,
+    amount REAL NOT NULL,
+    payment_method TEXT NOT NULL,
+    notes TEXT DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_income_user_month ON income(user_id, month_key);
+  CREATE INDEX IF NOT EXISTS idx_income_user_date ON income(user_id, date);
+
+  CREATE TABLE IF NOT EXISTS category_budgets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(user_id, month_key, category),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_cat_budgets_user_month ON category_budgets(user_id, month_key);
+
+  CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    color TEXT NOT NULL,
+    bg TEXT NOT NULL,
+    is_default INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
+
+  CREATE TABLE IF NOT EXISTS goals (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    target_amount REAL NOT NULL,
+    current_amount REAL DEFAULT 0,
+    deadline TEXT,
+    category TEXT,
+    icon TEXT,
+    color TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
+
+  CREATE TABLE IF NOT EXISTS user_settings (
+    user_id TEXT PRIMARY KEY,
+    currency TEXT DEFAULT 'INR',
+    theme TEXT DEFAULT 'midnight',
+    expense_alerts INTEGER DEFAULT 1,
+    budget_alerts INTEGER DEFAULT 1,
+    weekly_reports INTEGER DEFAULT 1,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 // Migrations: Ensure newer columns exist in older databases
@@ -143,6 +217,22 @@ try {
 
 try {
   db.exec('ALTER TABLE users ADD COLUMN verified_at INTEGER;');
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN phone TEXT;');
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN google_id TEXT;');
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE users ADD COLUMN updated_at DATETIME;');
+} catch (e) {}
+
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);');
 } catch (e) {}
 
 console.log('[Hisabo DB] SQLite Database initialized at:', dbPath);
@@ -225,6 +315,57 @@ export const userDAO = {
     stmt.run(id);
   },
 
+  findByGoogleId(googleId) {
+    if (!googleId) return null;
+    const stmt = db.prepare('SELECT * FROM users WHERE google_id = ?');
+    return stmt.get(String(googleId));
+  },
+
+  upsertGoogleUser({ googleId, email, name, picture }) {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    // 1. Try finding by Google ID
+    let user = this.findByGoogleId(googleId);
+    if (user) {
+      const stmt = db.prepare(`
+        UPDATE users 
+        SET name = COALESCE(?, name),
+            picture = COALESCE(?, picture),
+            is_verified = 1,
+            last_login = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      stmt.run(name || null, picture || null, user.id);
+      return this.findById(user.id);
+    }
+
+    // 2. Try finding by email (link Google ID to existing account)
+    user = this.findByEmail(cleanEmail);
+    if (user) {
+      const stmt = db.prepare(`
+        UPDATE users 
+        SET google_id = COALESCE(?, google_id),
+            name = COALESCE(?, name),
+            picture = COALESCE(?, picture),
+            is_verified = 1,
+            last_login = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      stmt.run(googleId ? String(googleId) : null, name || null, picture || null, user.id);
+      return this.findById(user.id);
+    }
+
+    // 3. Create new user with Google identity
+    const newId = 'usr_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8);
+    const stmt = db.prepare(`
+      INSERT INTO users (id, email, name, picture, provider, google_id, is_verified, verified_at, created_at, last_login, updated_at)
+      VALUES (?, ?, ?, ?, 'google', ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    stmt.run(newId, cleanEmail, name || null, picture || null, googleId ? String(googleId) : null, Date.now());
+    return this.findById(newId);
+  },
+
   upsertUser({ id, email, name, picture, provider = 'google' }) {
     const cleanEmail = email.toLowerCase().trim();
     const existing = this.findByEmail(cleanEmail);
@@ -232,15 +373,15 @@ export const userDAO = {
     if (existing) {
       const stmt = db.prepare(`
         UPDATE users 
-        SET name = COALESCE(?, name), picture = COALESCE(?, picture), is_verified = 1, last_login = CURRENT_TIMESTAMP 
+        SET name = COALESCE(?, name), picture = COALESCE(?, picture), is_verified = 1, last_login = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `);
       stmt.run(name || existing.name || null, picture || existing.picture || null, existing.id);
       return this.findById(existing.id);
     } else {
       const stmt = db.prepare(`
-        INSERT INTO users (id, email, name, picture, provider, is_verified, verified_at, created_at, last_login)
-        VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO users (id, email, name, picture, provider, is_verified, verified_at, created_at, last_login, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
       stmt.run(id, cleanEmail, name || null, picture || null, provider || 'google', Date.now());
       return this.findById(id);
@@ -370,7 +511,7 @@ export const sessionDAO = {
 
   findSession(token) {
     const stmt = db.prepare(`
-      SELECT s.token, s.user_id, s.expires_at, u.id, u.email, u.name, u.picture
+      SELECT s.token, s.user_id, s.expires_at, u.id, u.email, u.name, u.picture, u.provider, u.google_id, u.is_verified
       FROM sessions s
       JOIN users u ON s.user_id = u.id
       WHERE s.token = ? AND s.expires_at > ?
@@ -592,7 +733,7 @@ export const budgetDAO = {
   getForMonth(userId, monthKey) {
     const stmt = db.prepare('SELECT amount FROM budgets WHERE user_id = ? AND month_key = ?');
     const row = stmt.get(userId, monthKey);
-    return row ? row.amount : 25000;
+    return row ? row.amount : 5000;
   },
 
   upsert(userId, monthKey, amount) {
@@ -606,6 +747,460 @@ export const budgetDAO = {
     const val = Math.round(parseFloat(amount));
     stmt.run(userId, monthKey, val, Date.now());
     return { monthKey, amount: val };
+  },
+
+  getCategoryBudgets(userId, monthKey) {
+    const stmt = db.prepare('SELECT category, amount FROM category_budgets WHERE user_id = ? AND month_key = ?');
+    const rows = stmt.all(userId, monthKey);
+    const catBudgets = {};
+    rows.forEach(r => {
+      catBudgets[r.category] = r.amount;
+    });
+    return catBudgets;
+  },
+
+  upsertCategoryBudget(userId, monthKey, category, amount) {
+    const id = `cb_${userId}_${monthKey}_${category}`.replace(/\s+/g, '_');
+    const stmt = db.prepare(`
+      INSERT INTO category_budgets (id, user_id, month_key, category, amount, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, month_key, category) DO UPDATE SET
+        amount = excluded.amount,
+        updated_at = excluded.updated_at
+    `);
+    const val = Math.round(parseFloat(amount) * 100) / 100;
+    stmt.run(id, userId, monthKey, category, val, Date.now());
+    return { monthKey, category, amount: val };
+  },
+
+  deleteCategoryBudget(userId, monthKey, category) {
+    const stmt = db.prepare('DELETE FROM category_budgets WHERE user_id = ? AND month_key = ? AND category = ?');
+    const res = stmt.run(userId, monthKey, category);
+    return res.changes > 0;
+  }
+};
+
+export const incomeDAO = {
+  getAll(userId, { month, source, search, sort = 'date-desc' } = {}) {
+    let query = 'SELECT * FROM income WHERE user_id = ?';
+    const params = [userId];
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      query += ' AND month_key = ?';
+      params.push(month);
+    }
+
+    if (source && source !== 'All') {
+      query += ' AND source = ?';
+      params.push(source);
+    }
+
+    if (search && search.trim()) {
+      query += ' AND (LOWER(source) LIKE ? OR LOWER(notes) LIKE ?)';
+      const term = `%${search.toLowerCase().trim()}%`;
+      params.push(term, term);
+    }
+
+    const sortClauses = {
+      'date-desc': ' ORDER BY date DESC, created_at DESC',
+      'date-asc': ' ORDER BY date ASC, created_at ASC',
+      'amount-desc': ' ORDER BY amount DESC, date DESC',
+      'amount-asc': ' ORDER BY amount ASC, date ASC'
+    };
+    query += sortClauses[sort] || sortClauses['date-desc'];
+
+    const stmt = db.prepare(query);
+    const rows = stmt.all(...params);
+    return rows.map(r => ({
+      id: r.id,
+      date: r.date,
+      monthKey: r.month_key,
+      source: r.source,
+      amount: r.amount,
+      paymentMethod: r.payment_method,
+      notes: r.notes || '',
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  },
+
+  getById(userId, id) {
+    const stmt = db.prepare('SELECT * FROM income WHERE user_id = ? AND id = ?');
+    const r = stmt.get(userId, id);
+    if (!r) return null;
+    return {
+      id: r.id,
+      date: r.date,
+      monthKey: r.month_key,
+      source: r.source,
+      amount: r.amount,
+      paymentMethod: r.payment_method,
+      notes: r.notes || '',
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  },
+
+  create(userId, data) {
+    const now = Date.now();
+    const id = data.id || ('inc_' + now + '_' + Math.random().toString(36).substring(2, 7));
+    const date = data.date || new Date().toISOString().split('T')[0];
+    const monthKey = data.monthKey || date.substring(0, 7);
+    const amount = Math.round(parseFloat(data.amount) * 100) / 100;
+
+    const stmt = db.prepare(`
+      INSERT INTO income (id, user_id, date, month_key, source, amount, payment_method, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      userId,
+      date,
+      monthKey,
+      (data.source || 'Other').trim(),
+      amount,
+      data.paymentMethod || 'UPI',
+      (data.notes || '').trim(),
+      now,
+      now
+    );
+
+    return this.getById(userId, id);
+  },
+
+  update(userId, id, data) {
+    const existing = this.getById(userId, id);
+    if (!existing) return null;
+
+    const now = Date.now();
+    const date = data.date || existing.date;
+    const monthKey = date.substring(0, 7);
+    const amount = data.amount !== undefined ? Math.round(parseFloat(data.amount) * 100) / 100 : existing.amount;
+    const source = data.source ? data.source.trim() : existing.source;
+    const paymentMethod = data.paymentMethod || existing.paymentMethod;
+    const notes = data.notes !== undefined ? (data.notes || '').trim() : existing.notes;
+
+    const stmt = db.prepare(`
+      UPDATE income
+      SET date = ?, month_key = ?, source = ?, amount = ?, payment_method = ?, notes = ?, updated_at = ?
+      WHERE user_id = ? AND id = ?
+    `);
+
+    stmt.run(date, monthKey, source, amount, paymentMethod, notes, now, userId, id);
+    return this.getById(userId, id);
+  },
+
+  delete(userId, id) {
+    const stmt = db.prepare('DELETE FROM income WHERE user_id = ? AND id = ?');
+    const res = stmt.run(userId, id);
+    return res.changes > 0;
+  },
+
+  deleteMonth(userId, monthKey) {
+    const stmt = db.prepare('DELETE FROM income WHERE user_id = ? AND month_key = ?');
+    const res = stmt.run(userId, monthKey);
+    return res.changes;
+  },
+
+  deleteAll(userId) {
+    const stmt = db.prepare('DELETE FROM income WHERE user_id = ?');
+    const res = stmt.run(userId);
+    return res.changes;
+  },
+
+  getTotalForMonth(userId, monthKey) {
+    const stmt = db.prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM income WHERE user_id = ? AND month_key = ?');
+    const res = stmt.get(userId, monthKey);
+    return Math.round((res?.total || 0) * 100) / 100;
+  }
+};
+
+export const categoryDAO = {
+  getDefaultCategories() {
+    return [
+      { id: 'Food', name: 'Food', label: 'Food & Dining', icon: 'utensils', color: '#f97316', bg: 'rgba(249, 115, 22, 0.15)', isDefault: true },
+      { id: 'Travel', name: 'Travel', label: 'Travel & Commute', icon: 'car', color: '#0284c7', bg: 'rgba(2, 132, 199, 0.15)', isDefault: true },
+      { id: 'Shopping', name: 'Shopping', label: 'Shopping', icon: 'shopping-bag', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)', isDefault: true },
+      { id: 'Education', name: 'Education', label: 'Education & Courses', icon: 'graduation-cap', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', isDefault: true },
+      { id: 'Entertainment', name: 'Entertainment', label: 'Entertainment & Outings', icon: 'film', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.15)', isDefault: true },
+      { id: 'Bills', name: 'Bills', label: 'Bills & Utilities', icon: 'zap', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)', isDefault: true },
+      { id: 'Health', name: 'Health', label: 'Health & Fitness', icon: 'heart-pulse', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)', isDefault: true },
+      { id: 'Hostel', name: 'Hostel', label: 'Hostel / Rent', icon: 'home', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.15)', isDefault: true },
+      { id: 'Personal', name: 'Personal', label: 'Personal Care', icon: 'user', color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)', isDefault: true },
+      { id: 'Other', name: 'Other', label: 'Other', icon: 'more-horizontal', color: '#64748b', bg: 'rgba(100, 116, 139, 0.15)', isDefault: true }
+    ];
+  },
+
+  getAll(userId) {
+    const defaults = this.getDefaultCategories();
+    const stmt = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY created_at ASC');
+    const rows = stmt.all(userId);
+    const custom = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      label: r.name,
+      icon: r.icon,
+      color: r.color,
+      bg: r.bg || `${r.color}26`,
+      isDefault: false
+    }));
+    return [...defaults, ...custom];
+  },
+
+  create(userId, data) {
+    const now = Date.now();
+    const id = 'cat_' + now + '_' + Math.random().toString(36).substring(2, 7);
+    const name = data.name.trim();
+    const icon = data.icon || 'tag';
+    const color = data.color || '#38bdf8';
+    const bg = data.bg || `${color}26`;
+
+    const stmt = db.prepare(`
+      INSERT INTO categories (id, user_id, name, icon, color, bg, is_default, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+    `);
+    stmt.run(id, userId, name, icon, color, bg, now);
+    return { id, name, icon, color, bg, isDefault: false };
+  },
+
+  update(userId, id, data) {
+    const stmt = db.prepare(`
+      UPDATE categories
+      SET name = COALESCE(?, name),
+          icon = COALESCE(?, icon),
+          color = COALESCE(?, color),
+          bg = COALESCE(?, bg)
+      WHERE user_id = ? AND id = ?
+    `);
+    stmt.run(data.name?.trim() || null, data.icon || null, data.color || null, data.bg || null, userId, id);
+    const checkStmt = db.prepare('SELECT * FROM categories WHERE user_id = ? AND id = ?');
+    const r = checkStmt.get(userId, id);
+    if (!r) return null;
+    return { id: r.id, name: r.name, icon: r.icon, color: r.color, bg: r.bg, isDefault: false };
+  },
+
+  hasExpenses(userId, categoryName) {
+    const stmt = db.prepare('SELECT COUNT(*) AS count FROM expenses WHERE user_id = ? AND category = ?');
+    const res = stmt.get(userId, categoryName);
+    return (res?.count || 0) > 0;
+  },
+
+  delete(userId, id) {
+    const stmt = db.prepare('DELETE FROM categories WHERE user_id = ? AND id = ?');
+    const res = stmt.run(userId, id);
+    return res.changes > 0;
+  }
+};
+
+export const goalDAO = {
+  getAll(userId) {
+    const stmt = db.prepare('SELECT * FROM goals WHERE user_id = ? ORDER BY created_at DESC');
+    const rows = stmt.all(userId);
+    return rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      targetAmount: r.target_amount,
+      currentAmount: r.current_amount,
+      deadline: r.deadline || '',
+      category: r.category || 'Savings',
+      icon: r.icon || 'target',
+      color: r.color || '#38bdf8',
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  },
+
+  getById(userId, id) {
+    const stmt = db.prepare('SELECT * FROM goals WHERE user_id = ? AND id = ?');
+    const r = stmt.get(userId, id);
+    if (!r) return null;
+    return {
+      id: r.id,
+      name: r.name,
+      targetAmount: r.target_amount,
+      currentAmount: r.current_amount,
+      deadline: r.deadline || '',
+      category: r.category || 'Savings',
+      icon: r.icon || 'target',
+      color: r.color || '#38bdf8',
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  },
+
+  create(userId, data) {
+    const now = Date.now();
+    const id = 'goal_' + now + '_' + Math.random().toString(36).substring(2, 7);
+    const targetAmount = Math.round(parseFloat(data.targetAmount) * 100) / 100;
+    const currentAmount = data.currentAmount ? Math.round(parseFloat(data.currentAmount) * 100) / 100 : 0;
+
+    const stmt = db.prepare(`
+      INSERT INTO goals (id, user_id, name, target_amount, current_amount, deadline, category, icon, color, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      userId,
+      data.name.trim(),
+      targetAmount,
+      currentAmount,
+      data.deadline || null,
+      data.category || 'Savings',
+      data.icon || 'target',
+      data.color || '#38bdf8',
+      now,
+      now
+    );
+
+    return this.getById(userId, id);
+  },
+
+  update(userId, id, data) {
+    const existing = this.getById(userId, id);
+    if (!existing) return null;
+
+    const now = Date.now();
+    const name = data.name !== undefined ? data.name.trim() : existing.name;
+    const targetAmount = data.targetAmount !== undefined ? Math.round(parseFloat(data.targetAmount) * 100) / 100 : existing.targetAmount;
+    const currentAmount = data.currentAmount !== undefined ? Math.round(parseFloat(data.currentAmount) * 100) / 100 : existing.currentAmount;
+    const deadline = data.deadline !== undefined ? data.deadline : existing.deadline;
+    const category = data.category || existing.category;
+    const icon = data.icon || existing.icon;
+    const color = data.color || existing.color;
+
+    const stmt = db.prepare(`
+      UPDATE goals
+      SET name = ?, target_amount = ?, current_amount = ?, deadline = ?, category = ?, icon = ?, color = ?, updated_at = ?
+      WHERE user_id = ? AND id = ?
+    `);
+    stmt.run(name, targetAmount, currentAmount, deadline, category, icon, color, now, userId, id);
+    return this.getById(userId, id);
+  },
+
+  addFunds(userId, id, amount) {
+    const existing = this.getById(userId, id);
+    if (!existing) return null;
+
+    const addVal = Math.round(parseFloat(amount) * 100) / 100;
+    if (isNaN(addVal) || addVal <= 0) return existing;
+
+    const newTotal = Math.round((existing.currentAmount + addVal) * 100) / 100;
+    const stmt = db.prepare('UPDATE goals SET current_amount = ?, updated_at = ? WHERE user_id = ? AND id = ?');
+    stmt.run(newTotal, Date.now(), userId, id);
+    return this.getById(userId, id);
+  },
+
+  delete(userId, id) {
+    const stmt = db.prepare('DELETE FROM goals WHERE user_id = ? AND id = ?');
+    const res = stmt.run(userId, id);
+    return res.changes > 0;
+  }
+};
+
+export const profileDAO = {
+  getProfile(userId) {
+    const userStmt = db.prepare('SELECT id, email, name, picture, phone, provider, created_at, last_login FROM users WHERE id = ?');
+    const user = userStmt.get(userId);
+    if (!user) return null;
+
+    // Get lifetime stats
+    const expStmt = db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ?');
+    const expStats = expStmt.get(userId);
+
+    const incStmt = db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM income WHERE user_id = ?');
+    const incStats = incStmt.get(userId);
+
+    const goalStmt = db.prepare('SELECT COUNT(*) AS count FROM goals WHERE user_id = ?');
+    const goalStats = goalStmt.get(userId);
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name || '',
+      picture: user.picture || '',
+      phone: user.phone || '',
+      provider: user.provider,
+      createdAt: user.created_at,
+      lastLogin: user.last_login,
+      stats: {
+        totalExpensesCount: expStats?.count || 0,
+        totalExpensesAmount: Math.round((expStats?.total || 0) * 100) / 100,
+        totalIncomeCount: incStats?.count || 0,
+        totalIncomeAmount: Math.round((incStats?.total || 0) * 100) / 100,
+        activeGoalsCount: goalStats?.count || 0
+      }
+    };
+  },
+
+  updateProfile(userId, { name, phone, picture }) {
+    const stmt = db.prepare(`
+      UPDATE users
+      SET name = COALESCE(?, name),
+          phone = COALESCE(?, phone),
+          picture = COALESCE(?, picture)
+      WHERE id = ?
+    `);
+    stmt.run(name !== undefined ? name.trim() : null, phone !== undefined ? phone.trim() : null, picture !== undefined ? picture : null, userId);
+    return this.getProfile(userId);
+  },
+
+  getSettings(userId) {
+    const stmt = db.prepare('SELECT * FROM user_settings WHERE user_id = ?');
+    const row = stmt.get(userId);
+    if (!row) {
+      return {
+        currency: 'INR',
+        theme: 'midnight',
+        expenseAlerts: true,
+        budgetAlerts: true,
+        weeklyReports: true
+      };
+    }
+    return {
+      currency: row.currency || 'INR',
+      theme: row.theme || 'midnight',
+      expenseAlerts: Boolean(row.expense_alerts),
+      budgetAlerts: Boolean(row.budget_alerts),
+      weeklyReports: Boolean(row.weekly_reports)
+    };
+  },
+
+  updateSettings(userId, settings) {
+    const current = this.getSettings(userId);
+    const updated = { ...current, ...settings };
+    const now = Date.now();
+
+    const stmt = db.prepare(`
+      INSERT INTO user_settings (user_id, currency, theme, expense_alerts, budget_alerts, weekly_reports, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        currency = excluded.currency,
+        theme = excluded.theme,
+        expense_alerts = excluded.expense_alerts,
+        budget_alerts = excluded.budget_alerts,
+        weekly_reports = excluded.weekly_reports,
+        updated_at = excluded.updated_at
+    `);
+
+    stmt.run(
+      userId,
+      updated.currency || 'INR',
+      updated.theme || 'midnight',
+      updated.expenseAlerts ? 1 : 0,
+      updated.budgetAlerts ? 1 : 0,
+      updated.weeklyReports ? 1 : 0,
+      now
+    );
+
+    return this.getSettings(userId);
+  },
+
+  deleteAccount(userId) {
+    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
+    const res = stmt.run(userId);
+    return res.changes > 0;
   }
 };
 

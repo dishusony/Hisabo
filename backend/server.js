@@ -12,8 +12,12 @@ import { fileURLToPath } from 'node:url';
 // Import Routes & Middleware
 import authRoutes from './routes/auth.routes.js';
 import expensesRoutes from './routes/expenses.routes.js';
+import incomeRoutes from './routes/income.routes.js';
 import budgetsRoutes from './routes/budgets.routes.js';
+import categoriesRoutes from './routes/categories.routes.js';
+import goalsRoutes from './routes/goals.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
+import profileRoutes from './routes/profile.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -89,6 +93,28 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Zero-dependency Cookie Parser Middleware
+app.use((req, res, next) => {
+  req.cookies = {};
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const pairs = cookieHeader.split(';');
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=');
+      if (idx > 0) {
+        const key = pair.slice(0, idx).trim();
+        const val = pair.slice(idx + 1).trim();
+        try {
+          req.cookies[key] = decodeURIComponent(val);
+        } catch (e) {
+          req.cookies[key] = val;
+        }
+      }
+    }
+  }
+  next();
+});
+
 // Safe Public Health API
 app.get('/api/status', (req, res) => {
   res.json({
@@ -102,16 +128,22 @@ app.get('/api/status', (req, res) => {
 // Mount Modular REST API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/expenses', expensesRoutes);
+app.use('/api/income', incomeRoutes);
 app.use('/api/budgets', budgetsRoutes);
+app.use('/api/categories', categoriesRoutes);
+app.use('/api/goals', goalsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Static Asset Serving
 app.use(express.static(rootDir, {
   dotfiles: 'deny',
   index: 'index.html',
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache');
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=3600');
     }

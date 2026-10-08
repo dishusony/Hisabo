@@ -32,18 +32,35 @@ export const PAYMENT_METHODS = [
   { id: 'Other', label: 'Other', icon: 'wallet', color: '#64748b' }
 ];
 
-export const DEFAULT_BUDGET = 25000;
+export const DEFAULT_BUDGET = 5000;
 
 class ExpenseStore {
   constructor() {
     this.expenses = [];
+    this.income = [];
     this.budgets = {
-      '2026-09': 25000,
-      '2026-08': 25000,
-      '2026-07': 22000
+      '2026-09': 5000,
+      '2026-08': 5000,
+      '2026-07': 5000
+    };
+    this.categoryBudgets = {};
+    this.categories = [...CATEGORIES];
+    this.goals = [];
+    this.profile = null;
+    this.settings = {
+      currency: 'INR',
+      theme: 'midnight',
+      expenseAlerts: true,
+      budgetAlerts: true,
+      weeklyReports: true
     };
     this.currentUser = null;
     this.selectedMonth = this.getInitialMonth();
+    this.offlineQueue = this.loadOfflineQueue();
+  }
+
+  async init() {
+    return this.loadFromDatabase();
   }
 
   getInitialMonth() {
@@ -70,6 +87,29 @@ class ExpenseStore {
     }
   }
 
+  resetState() {
+    this.expenses = [];
+    this.income = [];
+    this.budgets = {
+      '2026-09': 5000,
+      '2026-08': 5000,
+      '2026-07': 5000
+    };
+    this.categoryBudgets = {};
+    this.categories = [...CATEGORIES];
+    this.goals = [];
+    this.profile = null;
+    this.currentUser = null;
+    this.selectedMonth = this.getInitialMonth();
+  }
+
+  resetToCurrentMonth() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    this.setSelectedMonth(`${y}-${m}`);
+  }
+
   getSelectedMonth() {
     return this.selectedMonth;
   }
@@ -85,6 +125,7 @@ class ExpenseStore {
     const val = Number(amount);
     if (!isNaN(val) && val >= 0) {
       this.budgets[monthKey] = Math.round(val);
+      this.saveLocalFallback();
       if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
         try {
           const res = await api.setBudget(monthKey, Math.round(val));
@@ -100,6 +141,10 @@ class ExpenseStore {
     return false;
   }
 
+  async setMonthlyBudget(monthKey, amount) {
+    return this.setBudget(monthKey, amount);
+  }
+
   /**
    * Loads the authoritative list of user expenses and budgets from the backend database.
    * Does NOT restore old data from localStorage.
@@ -111,22 +156,110 @@ class ExpenseStore {
     }
 
     try {
-      const [expenses, budgets] = await Promise.all([
-        api.getExpenses(),
-        api.getBudgets().catch(() => ({}))
+      const [expenses, budgets, income, categoryBudgets, categories, goals, profile, settings] = await Promise.all([
+        api.getExpenses().catch(() => []),
+        api.getBudgets().catch(() => ({})),
+        api.getIncome().catch(() => []),
+        api.getCategoryBudgets(this.selectedMonth).catch(() => ({})),
+        api.getCategories().catch(() => []),
+        api.getGoals().catch(() => []),
+        api.getProfile().catch(() => null),
+        api.getSettings().catch(() => null)
       ]);
 
-      this.expenses = Array.isArray(expenses) ? expenses : [];
+      this.expenses = Array.isArray(expenses)
+        ? expenses.map(e => ({
+            ...e,
+            title: e.title || e.item || 'Expense',
+            item: e.item || e.title || 'Expense'
+          }))
+        : [];
       if (budgets && typeof budgets === 'object') {
         this.budgets = { ...this.budgets, ...budgets };
       }
+      this.income = Array.isArray(income) ? income : [];
+      if (categoryBudgets && typeof categoryBudgets === 'object') {
+        this.categoryBudgets[this.selectedMonth] = categoryBudgets;
+      }
+      if (Array.isArray(categories) && categories.length > 0) {
+        this.categories = categories.map(c => ({
+          ...c,
+          label: c.label || c.name || c.id,
+          name: c.name || c.label || c.id
+        }));
+      }
+      this.goals = Array.isArray(goals) ? goals : [];
+      if (profile) this.profile = profile;
+      if (settings) this.settings = settings;
+
       this.saveLocalFallback();
       return true;
     } catch (err) {
-      console.warn('[Store] Could not load expenses from database, loading local fallback:', err.message);
+      console.warn('[Store] Could not load from database, loading local fallback:', err.message);
       this.loadLocalFallback();
       return false;
     }
+  }
+
+  loadOfflineQueue() {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+      const q = localStorage.getItem('hisabo_offline_queue');
+      return q ? JSON.parse(q) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  saveOfflineQueue() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem('hisabo_offline_queue', JSON.stringify(this.offlineQueue));
+    } catch (e) {}
+  }
+
+  queueOfflineOperation(op, item) {
+    if (!this.offlineQueue) this.offlineQueue = [];
+    this.offlineQueue.push({ op, item, timestamp: Date.now() });
+    this.saveOfflineQueue();
+  }
+
+  getOfflineQueueCount() {
+    return (this.offlineQueue || []).length;
+  }
+
+  async syncOfflineQueue() {
+    if (typeof fetch === 'undefined' || !api?.hasToken || !api.hasToken() || !this.offlineQueue || this.offlineQueue.length === 0) {
+      return 0;
+    }
+    let syncedCount = 0;
+    const remainingQueue = [];
+    for (const entry of this.offlineQueue) {
+      try {
+        if (entry.op === 'add') {
+          const res = await api.createExpense(entry.item);
+          if (res && res.id) {
+            const idx = this.expenses.findIndex(e => e.id === entry.item.id);
+            if (idx !== -1) {
+              this.expenses[idx] = { ...this.expenses[idx], ...res };
+            }
+          }
+          syncedCount++;
+        } else if (entry.op === 'update') {
+          await api.updateExpense(entry.item.id, entry.item);
+          syncedCount++;
+        } else if (entry.op === 'delete') {
+          await api.deleteExpense(entry.item.id);
+          syncedCount++;
+        }
+      } catch (err) {
+        remainingQueue.push(entry);
+      }
+    }
+    this.offlineQueue = remainingQueue;
+    this.saveOfflineQueue();
+    this.saveLocalFallback();
+    return syncedCount;
   }
 
   saveLocalFallback() {
@@ -162,14 +295,20 @@ class ExpenseStore {
     });
   }
 
+  getMonthExpenses(monthKey = this.selectedMonth) {
+    return this.getExpensesForMonth(monthKey);
+  }
+
   getExpenseById(id) {
     return this.expenses.find(item => item.id === id) || null;
   }
 
   /**
    * Adds an expense to the backend database and updates state.
+   * Resilient to network outages: saves locally, queues for auto-retry when connection returns,
+   * and provides synchronous property access and Promise resolution.
    */
-  async addExpense(data) {
+  addExpense(data) {
     const date = data.date || new Date().toISOString().split('T')[0];
     const monthKey = date.substring(0, 7);
     const amount = parseFloat(data.amount);
@@ -177,53 +316,66 @@ class ExpenseStore {
     if (isNaN(amount) || amount <= 0) {
       throw new Error('Amount must be a positive number');
     }
-    if (!data.item || !data.item.trim()) {
+    const finalItem = (data.item || data.title || data.name || '').trim();
+    if (!finalItem) {
       throw new Error('Expense item name is required');
     }
+
+    const userEmail = this.currentUser?.email || null;
+    const userId = this.currentUser?.id || null;
 
     const payload = {
       date,
       monthKey,
-      item: data.item.trim(),
+      item: finalItem,
+      title: finalItem,
       amount: Math.round(amount * 100) / 100,
       paymentMethod: data.paymentMethod || 'UPI',
       category: data.category || 'Food',
       notes: (data.notes || '').trim()
     };
 
-    let newExpense;
-    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      try {
-        // Save directly to the backend database
-        newExpense = await api.createExpense(payload);
-      } catch (err) {
-        console.warn('[Store] Backend database sync unavailable, using local store:', err.message);
-        newExpense = {
-          id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-          ...payload,
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        };
-      }
-    } else {
-      // Offline / guest fallback
-      newExpense = {
-        id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        ...payload,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-    }
+    const fallbackId = 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const localExpense = {
+      id: fallbackId,
+      ...payload,
+      userEmail,
+      userId,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
 
-    this.expenses.unshift(newExpense);
+    this.expenses.unshift(localExpense);
     this.saveLocalFallback();
-    return newExpense;
+
+    const syncPromise = (async () => {
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        try {
+          const serverExp = await api.createExpense(payload);
+          if (serverExp && serverExp.id) {
+            const idx = this.expenses.findIndex(e => e.id === fallbackId);
+            if (idx !== -1) {
+              this.expenses[idx] = { ...this.expenses[idx], ...serverExp, userEmail, userId };
+              this.saveLocalFallback();
+              return this.expenses[idx];
+            }
+          }
+        } catch (err) {
+          console.warn('[Store] Backend database sync unavailable, queued for retry:', err.message);
+          this.queueOfflineOperation('add', localExpense);
+        }
+      }
+      return localExpense;
+    })();
+
+    Object.assign(syncPromise, localExpense);
+    return syncPromise;
   }
 
   /**
    * Updates an expense in the backend database and updates state.
    */
-  async updateExpense(id, data) {
+  updateExpense(id, data) {
     const index = this.expenses.findIndex(item => item.id === id);
     if (index === -1) {
       throw new Error('Expense not found');
@@ -235,59 +387,79 @@ class ExpenseStore {
       throw new Error('Amount must be a positive number');
     }
 
+    const userEmail = this.currentUser?.email || this.expenses[index].userEmail || null;
+    const userId = this.currentUser?.id || this.expenses[index].userId || null;
+
+    const finalItem = (data.item || data.title || data.name || '').trim() || this.expenses[index].item || this.expenses[index].title;
+
     const updatePayload = {
       date,
       monthKey: date.substring(0, 7),
-      item: data.item ? data.item.trim() : this.expenses[index].item,
+      item: finalItem,
+      title: finalItem,
       amount: Math.round(amount * 100) / 100,
       paymentMethod: data.paymentMethod || this.expenses[index].paymentMethod,
       category: data.category || this.expenses[index].category,
       notes: data.notes !== undefined ? (data.notes || '').trim() : this.expenses[index].notes
     };
 
-    let updatedExpense;
-    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      try {
-        updatedExpense = await api.updateExpense(id, updatePayload);
-      } catch (err) {
-        console.warn('[Store] Backend update failed, updating locally:', err.message);
-        updatedExpense = {
-          ...this.expenses[index],
-          ...updatePayload,
-          updatedAt: Date.now()
-        };
-      }
-    } else {
-      updatedExpense = {
-        ...this.expenses[index],
-        ...updatePayload,
-        updatedAt: Date.now()
-      };
-    }
+    const updatedExpense = {
+      ...this.expenses[index],
+      ...updatePayload,
+      userEmail,
+      userId,
+      updatedAt: Date.now()
+    };
 
     this.expenses[index] = updatedExpense;
     this.saveLocalFallback();
-    return updatedExpense;
+
+    const syncPromise = (async () => {
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        try {
+          const res = await api.updateExpense(id, updatePayload);
+          if (res) {
+            this.expenses[index] = { ...this.expenses[index], ...res, userEmail, userId };
+            this.saveLocalFallback();
+            return this.expenses[index];
+          }
+        } catch (err) {
+          console.warn('[Store] Backend update failed, queued for retry:', err.message);
+          this.queueOfflineOperation('update', { id, ...updatePayload });
+        }
+      }
+      return updatedExpense;
+    })();
+
+    Object.assign(syncPromise, updatedExpense);
+    return syncPromise;
   }
 
   /**
    * Deletes an expense from the backend database and updates state.
    */
-  async deleteExpense(id) {
-    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
-      try {
-        await api.deleteExpense(id);
-      } catch (err) {
-        console.warn('[Store] Backend delete failed, deleting locally:', err.message);
-      }
-    }
+  deleteExpense(id) {
     const index = this.expenses.findIndex(item => item.id === id);
     let removed = null;
     if (index !== -1) {
       removed = this.expenses.splice(index, 1)[0];
     }
     this.saveLocalFallback();
-    return removed;
+
+    const syncPromise = (async () => {
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        try {
+          await api.deleteExpense(id);
+        } catch (err) {
+          console.warn('[Store] Backend delete failed, queued for retry:', err.message);
+          this.queueOfflineOperation('delete', { id });
+        }
+      }
+      return removed;
+    })();
+
+    Object.assign(syncPromise, removed || {});
+    return syncPromise;
   }
 
   async duplicateExpense(id) {
@@ -351,10 +523,12 @@ class ExpenseStore {
 
   getMonthKPIs(monthKey = this.selectedMonth) {
     const list = this.getExpensesForMonth(monthKey);
+    const incList = this.getIncomeForMonth(monthKey);
     const budget = this.getBudget(monthKey);
 
     let totalSpent = 0;
     let highestExpense = { amount: 0, item: 'None' };
+    const dailyExpenses = {};
 
     list.forEach(item => {
       const amt = Number(item.amount) || 0;
@@ -362,22 +536,79 @@ class ExpenseStore {
       if (amt > highestExpense.amount) {
         highestExpense = { amount: amt, item: item.item };
       }
+      if (item.date) {
+        dailyExpenses[item.date] = (dailyExpenses[item.date] || 0) + amt;
+      }
+    });
+
+    let totalIncome = 0;
+    incList.forEach(item => {
+      totalIncome += (Number(item.amount) || 0);
     });
 
     totalSpent = Math.round(totalSpent * 100) / 100;
+    totalIncome = Math.round(totalIncome * 100) / 100;
+    const balance = Math.round((totalIncome - totalSpent) * 100) / 100;
+
+    // Previous month calculations
+    const [y, m] = monthKey.split('-').map(Number);
+    const prevDate = new Date(Date.UTC(y, m - 2, 1));
+    const prevMonthKey = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const prevExpList = this.getExpensesForMonth(prevMonthKey);
+    const prevIncList = this.getIncomeForMonth(prevMonthKey);
+    const prevTotalSpent = Math.round(prevExpList.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) * 100) / 100;
+    const prevTotalIncome = Math.round(prevIncList.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) * 100) / 100;
+    const prevBalance = Math.round((prevTotalIncome - prevTotalSpent) * 100) / 100;
+
+    const calcPct = (curr, prev) => {
+      if (!prev || prev === 0) return curr > 0 ? 100 : 0;
+      return Math.round(((curr - prev) / prev) * 100);
+    };
+
+    const expenseChangePercent = calcPct(totalSpent, prevTotalSpent);
+    const incomeChangePercent = calcPct(totalIncome, prevTotalIncome);
+    const balanceChangePercent = calcPct(balance, prevBalance);
+
     const remaining = Math.round((budget - totalSpent) * 100) / 100;
     const percentUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
     const count = list.length;
     const avgExpense = count > 0 ? Math.round((totalSpent / count) * 100) / 100 : 0;
 
+    // Highest spending day
+    let highestSpendingDay = { date: 'None', amount: 0 };
+    for (const [date, amt] of Object.entries(dailyExpenses)) {
+      if (amt > highestSpendingDay.amount) {
+        highestSpendingDay = { date, amount: Math.round(amt * 100) / 100 };
+      }
+    }
+
     return {
+      monthKey,
       totalSpent,
+      totalIncome,
+      balance,
+      prevTotalSpent,
+      prevTotalIncome,
+      prevBalance,
+      expenseChangePercent,
+      incomeChangePercent,
+      balanceChangePercent,
       budget,
       remaining,
       percentUsed,
+      percentage: percentUsed,
+      actualPercent: percentUsed,
+      isOverBudget: totalSpent > budget,
       count,
+      transactionCount: count,
       avgExpense,
-      highestExpense
+      averageExpense: avgExpense,
+      highestExpense,
+      highestSpendingDay,
+      categoryBudgets: this.categoryBudgets[monthKey] || {},
+      is50PercentReached: percentUsed >= 50,
+      is90PercentReached: percentUsed >= 90,
+      is100PercentReached: percentUsed >= 100
     };
   }
 
@@ -532,9 +763,392 @@ class ExpenseStore {
     return insights;
   }
 
+  // ============================================================================
+  // Income Management Methods
+  // ============================================================================
+  getAllIncome() {
+    return [...this.income];
+  }
+
+  getIncomeForMonth(monthKey = this.selectedMonth) {
+    return this.income.filter(item => {
+      const itemMonth = item.date ? item.date.substring(0, 7) : item.monthKey;
+      return itemMonth === monthKey;
+    });
+  }
+
+  getMonthIncome(monthKey = this.selectedMonth) {
+    return this.getIncomeForMonth(monthKey);
+  }
+
+  getIncomeById(id) {
+    return this.income.find(item => item.id === id) || null;
+  }
+
+  addIncome(data) {
+    const date = data.date || new Date().toISOString().split('T')[0];
+    const monthKey = date.substring(0, 7);
+    const amount = parseFloat(data.amount);
+
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error('Income amount must be a positive number');
+    }
+    const source = (data.source || data.title || data.item || '').trim();
+    if (!source) {
+      throw new Error('Income source is required');
+    }
+
+    const payload = {
+      date,
+      monthKey,
+      source,
+      amount: Math.round(amount * 100) / 100,
+      paymentMethod: data.paymentMethod || 'UPI',
+      notes: (data.notes || '').trim()
+    };
+
+    const fallbackId = 'inc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const localIncome = {
+      id: fallbackId,
+      ...payload,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    this.income.unshift(localIncome);
+    this.saveLocalFallback();
+
+    const syncPromise = (async () => {
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        try {
+          const serverInc = await api.createIncome(payload);
+          if (serverInc && serverInc.id) {
+            const idx = this.income.findIndex(i => i.id === fallbackId);
+            if (idx !== -1) {
+              this.income[idx] = { ...this.income[idx], ...serverInc };
+              this.saveLocalFallback();
+              return this.income[idx];
+            }
+          }
+        } catch (err) {
+          console.warn('[Store] Income sync failed:', err.message);
+        }
+      }
+      return localIncome;
+    })();
+
+    Object.assign(syncPromise, localIncome);
+    return syncPromise;
+  }
+
+  updateIncome(id, data) {
+    const index = this.income.findIndex(item => item.id === id);
+    if (index === -1) {
+      throw new Error('Income entry not found');
+    }
+
+    const date = data.date || this.income[index].date;
+    const amount = parseFloat(data.amount);
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error('Amount must be a positive number');
+    }
+
+    const payload = {
+      date,
+      monthKey: date.substring(0, 7),
+      source: data.source ? data.source.trim() : this.income[index].source,
+      amount: Math.round(amount * 100) / 100,
+      paymentMethod: data.paymentMethod || this.income[index].paymentMethod,
+      notes: data.notes !== undefined ? (data.notes || '').trim() : this.income[index].notes
+    };
+
+    const updated = { ...this.income[index], ...payload, updatedAt: Date.now() };
+    this.income[index] = updated;
+    this.saveLocalFallback();
+
+    const syncPromise = (async () => {
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        try {
+          const res = await api.updateIncome(id, payload);
+          if (res) {
+            this.income[index] = { ...this.income[index], ...res };
+            this.saveLocalFallback();
+            return this.income[index];
+          }
+        } catch (err) {
+          console.warn('[Store] Income update failed:', err.message);
+        }
+      }
+      return updated;
+    })();
+
+    Object.assign(syncPromise, updated);
+    return syncPromise;
+  }
+
+  deleteIncome(id) {
+    const index = this.income.findIndex(item => item.id === id);
+    let removed = null;
+    if (index !== -1) {
+      removed = this.income.splice(index, 1)[0];
+    }
+    this.saveLocalFallback();
+
+    const syncPromise = (async () => {
+      if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+        try {
+          await api.deleteIncome(id);
+        } catch (err) {
+          console.warn('[Store] Income delete failed:', err.message);
+        }
+      }
+      return removed;
+    })();
+
+    Object.assign(syncPromise, removed || {});
+    return syncPromise;
+  }
+
+  clearMonthIncome(monthKey = this.selectedMonth) {
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      api.deleteIncomeMonth(monthKey).catch(() => {});
+    }
+    this.income = this.income.filter(item => {
+      const itemMonth = item.date ? item.date.substring(0, 7) : item.monthKey;
+      return itemMonth !== monthKey;
+    });
+  }
+
+  // ============================================================================
+  // Category Budgets Methods
+  // ============================================================================
+  getCategoryBudgets(monthKey = this.selectedMonth) {
+    return this.categoryBudgets[monthKey] || {};
+  }
+
+  async setCategoryBudget(monthKey, category, amount) {
+    const val = Math.round(parseFloat(amount) * 100) / 100;
+    if (!this.categoryBudgets[monthKey]) {
+      this.categoryBudgets[monthKey] = {};
+    }
+    this.categoryBudgets[monthKey][category] = val;
+
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        await api.setCategoryBudget(monthKey, category, val);
+      } catch (err) {
+        console.warn('[Store] Set category budget failed:', err.message);
+      }
+    }
+    return true;
+  }
+
+  async deleteCategoryBudget(monthKey, category) {
+    if (this.categoryBudgets[monthKey]) {
+      delete this.categoryBudgets[monthKey][category];
+    }
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        await api.deleteCategoryBudget(monthKey, category);
+      } catch (err) {}
+    }
+    return true;
+  }
+
+  // ============================================================================
+  // Categories Methods
+  // ============================================================================
+  getCategories() {
+    return this.categories.map(c => ({
+      ...c,
+      label: c.label || c.name || c.id,
+      name: c.name || c.label || c.id
+    }));
+  }
+
+  async addCategory(data) {
+    const catName = (data.name || data.label || '').trim();
+    const newCat = {
+      id: data.id || ('cat_' + Date.now()),
+      name: catName,
+      label: catName,
+      icon: data.icon || 'tag',
+      color: data.color || '#38bdf8',
+      bg: data.bg || `${data.color || '#38bdf8'}26`,
+      isDefault: false
+    };
+    this.categories.push(newCat);
+
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        const res = await api.createCategory(newCat);
+        if (res?.category) {
+          const idx = this.categories.findIndex(c => c.id === newCat.id);
+          if (idx !== -1) this.categories[idx] = res.category;
+        }
+      } catch (err) {
+        console.warn('[Store] Add category API failed:', err.message);
+      }
+    }
+    return newCat;
+  }
+
+  async createCategory(data) {
+    return this.addCategory(data);
+  }
+
+  async deleteCategory(id, force = false) {
+    this.categories = this.categories.filter(c => c.id !== id);
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      await api.deleteCategory(id, force);
+    }
+    return true;
+  }
+
+  // ============================================================================
+  // Goals Methods
+  // ============================================================================
+  getGoals() {
+    return [...this.goals];
+  }
+
+  getGoalById(id) {
+    return this.goals.find(g => g.id === id) || null;
+  }
+
+  async addGoal(data) {
+    const fallbackId = 'goal_' + Date.now();
+    const newGoal = {
+      id: fallbackId,
+      name: data.name.trim(),
+      targetAmount: Math.round(parseFloat(data.targetAmount) * 100) / 100,
+      currentAmount: data.currentAmount ? Math.round(parseFloat(data.currentAmount) * 100) / 100 : 0,
+      deadline: data.deadline || '',
+      category: data.category || 'Savings',
+      icon: data.icon || 'target',
+      color: data.color || '#38bdf8',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    this.goals.unshift(newGoal);
+
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        const res = await api.createGoal(newGoal);
+        if (res && res.id) {
+          const idx = this.goals.findIndex(g => g.id === fallbackId);
+          if (idx !== -1) this.goals[idx] = res;
+        }
+      } catch (err) {
+        console.warn('[Store] Create goal API failed:', err.message);
+      }
+    }
+    return newGoal;
+  }
+
+  async createGoal(data) {
+    return this.addGoal(data);
+  }
+
+  async updateGoal(id, data) {
+    const idx = this.goals.findIndex(g => g.id === id);
+    if (idx === -1) return null;
+    this.goals[idx] = { ...this.goals[idx], ...data, updatedAt: Date.now() };
+
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        const res = await api.updateGoal(id, data);
+        if (res) this.goals[idx] = res;
+      } catch (err) {}
+    }
+    return this.goals[idx];
+  }
+
+  async addGoalFunds(id, amount) {
+    const numAmount = Math.round(parseFloat(amount) * 100) / 100;
+    const idx = this.goals.findIndex(g => g.id === id);
+    if (idx !== -1) {
+      this.goals[idx].currentAmount = Math.round((this.goals[idx].currentAmount + numAmount) * 100) / 100;
+    }
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        const res = await api.addGoalFunds(id, numAmount);
+        if (res?.goal && idx !== -1) this.goals[idx] = res.goal;
+      } catch (err) {}
+    }
+    return idx !== -1 ? this.goals[idx] : null;
+  }
+
+  async deleteGoal(id) {
+    this.goals = this.goals.filter(g => g.id !== id);
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        await api.deleteGoal(id);
+      } catch (err) {}
+    }
+    return true;
+  }
+
+  // ============================================================================
+  // Profile & Settings Methods
+  // ============================================================================
+  getProfile() {
+    return this.profile;
+  }
+
+  async updateProfile(data) {
+    this.profile = { ...(this.profile || {}), ...data };
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        const res = await api.updateProfile(data);
+        if (res) this.profile = res;
+      } catch (err) {}
+    }
+    return this.profile;
+  }
+
+  getSettings() {
+    return this.settings || {
+      currency: 'INR',
+      theme: 'midnight',
+      expenseAlerts: true,
+      budgetAlerts: true,
+      weeklyReports: true
+    };
+  }
+
+  getUserSettings() {
+    return this.getSettings();
+  }
+
+  getProfileStats() {
+    const allExpenses = this.getAllExpenses();
+    const allIncome = this.getAllIncome();
+    const totalExpense = allExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const totalIncome = allIncome.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    return {
+      totalExpense,
+      totalIncome,
+      totalTransactions: allExpenses.length + allIncome.length,
+      activeGoals: this.goals ? this.goals.length : 0
+    };
+  }
+
+  async updateSettings(data) {
+    this.settings = { ...this.getSettings(), ...data };
+    if (typeof fetch !== 'undefined' && api?.hasToken && api.hasToken()) {
+      try {
+        const res = await api.updateSettings(data);
+        if (res) this.settings = res;
+      } catch (err) {}
+    }
+    return this.settings;
+  }
+
   setCurrentUser(user) {
+    const prevId = this.currentUser?.id;
     this.currentUser = user || null;
-    if (!user) {
+    if (!user || user.id !== prevId) {
       this.expenses = [];
     }
   }
@@ -572,9 +1186,9 @@ class ExpenseStore {
     }));
 
     this.budgets = {
-      '2026-09': 25000,
-      '2026-08': 25000,
-      '2026-07': 22000
+      '2026-09': 5000,
+      '2026-08': 5000,
+      '2026-07': 5000
     };
   }
 }
@@ -589,3 +1203,22 @@ function formatRemainingDays(monthKey) {
 }
 
 export const store = new ExpenseStore();
+
+// Guarantee that convenience methods and aliases are attached directly to prototype and instance
+ExpenseStore.prototype.getMonthExpenses = ExpenseStore.prototype.getExpensesForMonth;
+ExpenseStore.prototype.getMonthIncome = ExpenseStore.prototype.getIncomeForMonth;
+ExpenseStore.prototype.setMonthlyBudget = ExpenseStore.prototype.setBudget;
+ExpenseStore.prototype.getUserSettings = ExpenseStore.prototype.getSettings;
+
+store.getMonthExpenses = function(monthKey = this.selectedMonth) {
+  return this.getExpensesForMonth(monthKey);
+};
+store.getMonthIncome = function(monthKey = this.selectedMonth) {
+  return this.getIncomeForMonth(monthKey);
+};
+store.setMonthlyBudget = function(monthKey, amount) {
+  return this.setBudget(monthKey, amount);
+};
+store.getUserSettings = function() {
+  return this.getSettings();
+};

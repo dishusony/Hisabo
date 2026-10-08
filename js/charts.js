@@ -1,87 +1,42 @@
 /**
- * charts.js - Chart.js Visualizations
- * Renders Category Donut, Payment Doughnut, Daily Trend Line, and Monthly Comparison Bar charts.
+ * charts.js - Chart.js Visualizations (Design #7 Fintech Aesthetics)
+ * Renders Spending Trend (weekly/monthly/yearly), Category Donut, Payment Method Doughnut,
+ * and Analytics Charts with deep dark obsidian surfaces and neon glow effects.
  */
 
-import { CATEGORIES, PAYMENT_METHODS } from './store.js';
+import { CATEGORIES, PAYMENT_METHODS } from './store.js?v=3.2';
 
+let spendingTrendChartInstance = null;
 let categoryChartInstance = null;
 let paymentChartInstance = null;
 let dailyTrendChartInstance = null;
 let monthlyComparisonChartInstance = null;
+let anTrendChartInstance = null;
+let anCategoryBarChartInstance = null;
+let anPaymentDonutChartInstance = null;
 
 function getChartTheme() {
-  const currentTheme = document.documentElement.getAttribute('data-theme') || 'emerald';
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'midnight';
   const isLight = currentTheme === 'pearl' || currentTheme === 'light';
 
-  const themePalettes = {
-    emerald: {
-      accent: '#10b981',
-      pointColor: '#34d399',
-      gradientStart: 'rgba(16, 185, 129, 0.45)',
-      gradientEnd: 'rgba(16, 185, 129, 0.0)',
-      grid: 'rgba(16, 185, 129, 0.1)',
-      border: 'rgba(16, 185, 129, 0.2)',
-      tooltipBg: '#0a1612',
-      tooltipBorder: 'rgba(16, 185, 129, 0.4)'
-    },
-    midnight: {
-      accent: '#6366f1',
-      pointColor: '#818cf8',
-      gradientStart: 'rgba(99, 102, 241, 0.45)',
-      gradientEnd: 'rgba(99, 102, 241, 0.0)',
-      grid: 'rgba(99, 102, 241, 0.08)',
-      border: 'rgba(99, 102, 241, 0.2)',
-      tooltipBg: '#0e1222',
-      tooltipBorder: 'rgba(99, 102, 241, 0.4)'
-    },
-    amethyst: {
-      accent: '#a855f7',
-      pointColor: '#c084fc',
-      gradientStart: 'rgba(168, 85, 247, 0.45)',
-      gradientEnd: 'rgba(168, 85, 247, 0.0)',
-      grid: 'rgba(168, 85, 247, 0.1)',
-      border: 'rgba(168, 85, 247, 0.2)',
-      tooltipBg: '#140d22',
-      tooltipBorder: 'rgba(168, 85, 247, 0.4)'
-    },
-    ocean: {
-      accent: '#0284c7',
-      pointColor: '#38bdf8',
-      gradientStart: 'rgba(2, 132, 199, 0.45)',
-      gradientEnd: 'rgba(2, 132, 199, 0.0)',
-      grid: 'rgba(2, 132, 199, 0.1)',
-      border: 'rgba(2, 132, 199, 0.2)',
-      tooltipBg: '#08162b',
-      tooltipBorder: 'rgba(2, 132, 199, 0.4)'
-    },
-    pearl: {
-      accent: '#059669',
-      pointColor: '#10b981',
-      gradientStart: 'rgba(16, 185, 129, 0.3)',
-      gradientEnd: 'rgba(16, 185, 129, 0.0)',
-      grid: 'rgba(0, 0, 0, 0.06)',
-      border: 'rgba(0, 0, 0, 0.08)',
-      tooltipBg: '#ffffff',
-      tooltipBorder: '#cbd5e1'
-    }
-  };
-
-  const pal = themePalettes[currentTheme] || themePalettes.emerald;
-
+  // Design #7: Midnight Cyber / Neon Fintech
   return {
     isLight,
-    accent: pal.accent,
-    pointColor: pal.pointColor,
-    gradientStart: pal.gradientStart,
-    gradientEnd: pal.gradientEnd,
-    textColor: isLight ? '#475569' : '#86efac',
-    headingColor: isLight ? '#0f172a' : '#f0fdf4',
-    gridColor: pal.grid,
-    borderColor: pal.border,
-    tooltipBg: pal.tooltipBg,
+    accent: '#00f0ff',
+    pointColor: '#38bdf8',
+    gradientStart: 'rgba(0, 240, 255, 0.45)',
+    gradientEnd: 'rgba(0, 240, 255, 0.0)',
+    purpleAccent: '#a855f7',
+    pinkAccent: '#ec4899',
+    emeraldAccent: '#10b981',
+    amberAccent: '#f59e0b',
+    textColor: isLight ? '#475569' : '#94a3b8',
+    headingColor: isLight ? '#0f172a' : '#f8fafc',
+    gridColor: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.06)',
+    borderColor: isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(56, 189, 248, 0.2)',
+    tooltipBg: isLight ? '#ffffff' : '#0c122a',
     tooltipText: isLight ? '#0f172a' : '#f8fafc',
-    tooltipBorder: pal.tooltipBorder
+    tooltipBorder: isLight ? '#cbd5e1' : 'rgba(0, 240, 255, 0.4)'
   };
 }
 
@@ -89,19 +44,156 @@ export function initCharts() {
   if (typeof Chart !== 'undefined') {
     Chart.defaults.font.family = "'Outfit', 'Plus Jakarta Sans', -apple-system, sans-serif";
     Chart.defaults.animation = {
-      duration: 1100,
+      duration: 800,
       easing: 'easeOutQuart'
     };
     Chart.defaults.transitions = {
       active: {
         animation: {
-          duration: 300
+          duration: 250
         }
       }
     };
   }
 }
 
+/**
+ * Render Interactive Spending Trend Chart (Dashboard Section 10)
+ * Supports Weekly, Monthly, Yearly toggles.
+ */
+export function renderSpendingTrendChart(canvasId, store, period = 'monthly') {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+
+  const theme = getChartTheme();
+  let labels = [];
+  let data = [];
+  let chartType = 'line';
+
+  const monthKey = store.getSelectedMonth();
+  const expenses = (typeof store.getMonthExpenses === 'function' ? store.getMonthExpenses(monthKey) : (store.getExpensesForMonth ? store.getExpensesForMonth(monthKey) : [])) || [];
+
+  if (period === 'weekly') {
+    // 4 weeks breakdown
+    labels = ['Week 1 (1-7)', 'Week 2 (8-14)', 'Week 3 (15-21)', 'Week 4 (22+)'];
+    const weekTotals = [0, 0, 0, 0];
+    expenses.forEach(e => {
+      const day = parseInt(e.date?.split('-')[2] || '1', 10);
+      if (day <= 7) weekTotals[0] += Number(e.amount) || 0;
+      else if (day <= 14) weekTotals[1] += Number(e.amount) || 0;
+      else if (day <= 21) weekTotals[2] += Number(e.amount) || 0;
+      else weekTotals[3] += Number(e.amount) || 0;
+    });
+    data = weekTotals;
+    chartType = 'bar';
+  } else if (period === 'yearly') {
+    // 12 months for year
+    const year = monthKey.split('-')[0];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    labels = monthNames;
+    const allExpenses = store.getAllExpenses();
+    const monthMap = {};
+    for (let i = 1; i <= 12; i++) {
+      const mk = `${year}-${String(i).padStart(2, '0')}`;
+      monthMap[mk] = 0;
+    }
+    allExpenses.forEach(e => {
+      if (e.date && e.date.startsWith(year)) {
+        const mk = e.date.substring(0, 7);
+        if (monthMap[mk] !== undefined) {
+          monthMap[mk] += Number(e.amount) || 0;
+        }
+      }
+    });
+    data = Object.values(monthMap);
+    chartType = 'bar';
+  } else {
+    // Monthly (Daily trend for current month)
+    const dailyData = store.getDailySpending(monthKey);
+    const dates = Object.keys(dailyData).sort();
+    labels = dates.map(d => {
+      const day = d.split('-')[2];
+      return `${parseInt(day, 10)}`;
+    });
+    data = dates.map(d => dailyData[d]);
+    chartType = 'line';
+  }
+
+  if (spendingTrendChartInstance) {
+    spendingTrendChartInstance.destroy();
+  }
+
+  const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 260);
+  gradient.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+  gradient.addColorStop(1, 'rgba(0, 240, 255, 0.0)');
+
+  spendingTrendChartInstance = new Chart(ctx, {
+    type: chartType,
+    data: {
+      labels: labels,
+      datasets: [{
+        label: period === 'weekly' ? 'Weekly Spend (₹)' : period === 'yearly' ? 'Monthly Spend (₹)' : 'Daily Spend (₹)',
+        data: data,
+        fill: chartType === 'line',
+        backgroundColor: chartType === 'line' ? gradient : 'rgba(0, 240, 255, 0.65)',
+        borderColor: '#00f0ff',
+        borderWidth: 2.5,
+        borderRadius: chartType === 'bar' ? 6 : 0,
+        tension: 0.35,
+        pointBackgroundColor: '#38bdf8',
+        pointBorderColor: '#0c122a',
+        pointBorderWidth: 2,
+        pointRadius: chartType === 'line' ? 3.5 : 0,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: theme.textColor,
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
+            maxTicksLimit: 15
+          }
+        },
+        y: {
+          grid: { color: theme.gridColor },
+          ticks: {
+            color: theme.textColor,
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
+            callback: value => '₹' + (value >= 1000 ? (value / 1000) + 'k' : value)
+          },
+          beginAtZero: true
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.tooltipBorder,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: function(context) {
+              const val = context.parsed.y !== undefined ? context.parsed.y : context.parsed;
+              return ` Spent: ₹${Number(val).toLocaleString('en-IN')}`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Render Category Breakdown Donut (Dashboard Section 11)
+ */
 export function renderCategoryChart(canvasId, breakdown) {
   const ctx = document.getElementById(canvasId);
   if (!ctx || typeof Chart === 'undefined') return;
@@ -112,13 +204,22 @@ export function renderCategoryChart(canvasId, breakdown) {
   const backgroundColors = [];
   const borderColors = [];
 
-  CATEGORIES.forEach(cat => {
+  // Design #7 Vibrant Neon Colors
+  const categoryNeonPalette = [
+    '#00f0ff', '#38bdf8', '#a855f7', '#ec4899', '#f43f5e',
+    '#10b981', '#f59e0b', '#6366f1', '#14b8a6', '#eab308'
+  ];
+
+  let colorIdx = 0;
+  const allCats = store.getCategories ? store.getCategories() : CATEGORIES;
+  allCats.forEach(cat => {
     const val = breakdown[cat.id] || 0;
     if (val > 0) {
-      labels.push(cat.label);
+      labels.push(cat.label || cat.name || cat.id);
       data.push(val);
-      backgroundColors.push(cat.color);
-      borderColors.push(theme.borderColor);
+      backgroundColors.push(cat.color || categoryNeonPalette[colorIdx % categoryNeonPalette.length]);
+      borderColors.push('#0c122a');
+      colorIdx++;
     }
   });
 
@@ -146,14 +247,14 @@ export function renderCategoryChart(canvasId, breakdown) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '68%',
+      cutout: '70%',
       plugins: {
         legend: {
           position: 'right',
           labels: {
             color: theme.textColor,
             font: { family: "'Plus Jakarta Sans', sans-serif", size: 12 },
-            padding: 14,
+            padding: 12,
             usePointStyle: true,
             pointStyle: 'circle'
           }
@@ -181,6 +282,9 @@ export function renderCategoryChart(canvasId, breakdown) {
   });
 }
 
+/**
+ * Render Payment Methods Doughnut
+ */
 export function renderPaymentChart(canvasId, breakdown) {
   const ctx = document.getElementById(canvasId);
   if (!ctx || typeof Chart === 'undefined') return;
@@ -215,7 +319,7 @@ export function renderPaymentChart(canvasId, breakdown) {
       datasets: [{
         data: chartData,
         backgroundColor: chartColors,
-        borderColor: theme.borderColor,
+        borderColor: '#0c122a',
         borderWidth: 2,
         hoverOffset: 6
       }]
@@ -223,14 +327,14 @@ export function renderPaymentChart(canvasId, breakdown) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '62%',
+      cutout: '65%',
       plugins: {
         legend: {
           position: 'right',
           labels: {
             color: theme.textColor,
             font: { family: "'Plus Jakarta Sans', sans-serif", size: 12 },
-            padding: 14,
+            padding: 12,
             usePointStyle: true,
             pointStyle: 'circle'
           }
@@ -258,197 +362,159 @@ export function renderPaymentChart(canvasId, breakdown) {
   });
 }
 
-export function renderDailyTrendChart(canvasId, dailyData, monthKey) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
-
+/**
+ * Render Analytics Page Charts (Section 18)
+ */
+export function renderAnalyticsCharts(store) {
+  const monthKey = store.getSelectedMonth();
   const theme = getChartTheme();
-  const dates = Object.keys(dailyData).sort();
-  const labels = dates.map(d => {
-    const day = d.split('-')[2];
-    return `${parseInt(day, 10)}`;
-  });
-  const data = dates.map(d => dailyData[d]);
 
-  if (dailyTrendChartInstance) {
-    dailyTrendChartInstance.destroy();
-  }
+  // 1. Expense Trend Line Chart (#anExpenseTrendChart or #anTrendChart)
+  const trendCtx = document.getElementById('anExpenseTrendChart') || document.getElementById('anTrendChart');
+  if (trendCtx && typeof Chart !== 'undefined') {
+    const dailyData = store.getDailySpending(monthKey);
+    const dates = Object.keys(dailyData).sort();
+    const labels = dates.map(d => parseInt(d.split('-')[2], 10));
+    const data = dates.map(d => dailyData[d]);
 
-  const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 240);
-  gradient.addColorStop(0, theme.gradientStart);
-  gradient.addColorStop(1, theme.gradientEnd);
+    if (anTrendChartInstance) anTrendChartInstance.destroy();
 
-  dailyTrendChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Daily Spend (₹)',
-        data: data,
-        fill: true,
-        backgroundColor: gradient,
-        borderColor: theme.accent,
-        borderWidth: 2.5,
-        tension: 0.35,
-        pointBackgroundColor: theme.pointColor,
-        pointBorderColor: theme.borderColor,
-        pointBorderWidth: 2,
-        pointRadius: 3,
-        pointHoverRadius: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: {
-            color: theme.textColor,
-            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
-            maxTicksLimit: 15
-          },
-          title: {
-            display: true,
-            text: 'Day of the Month',
-            color: theme.textColor,
-            font: { size: 11 }
-          }
-        },
-        y: {
-          grid: { color: theme.gridColor },
-          ticks: {
-            color: theme.textColor,
-            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
-            callback: value => '₹' + (value >= 1000 ? (value / 1000) + 'k' : value)
-          },
-          beginAtZero: true
-        }
+    const gradient = trendCtx.getContext('2d').createLinearGradient(0, 0, 0, 240);
+    gradient.addColorStop(0, 'rgba(168, 85, 247, 0.45)');
+    gradient.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+
+    anTrendChartInstance = new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Daily Spending (₹)',
+          data: data,
+          fill: true,
+          backgroundColor: gradient,
+          borderColor: '#a855f7',
+          borderWidth: 2.5,
+          tension: 0.35,
+          pointBackgroundColor: '#c084fc',
+          pointRadius: 3
+        }]
       },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: theme.tooltipBg,
-          titleColor: theme.tooltipText,
-          bodyColor: theme.tooltipText,
-          borderColor: theme.tooltipBorder,
-          borderWidth: 1,
-          padding: 10,
-          cornerRadius: 8,
-          callbacks: {
-            title: function(items) {
-              const day = items[0].label;
-              return `Day ${day} (${monthKey}-${day.padStart(2, '0')})`;
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: theme.textColor }
+          },
+          y: {
+            grid: { color: theme.gridColor },
+            ticks: {
+              color: theme.textColor,
+              callback: value => '₹' + (value >= 1000 ? (value / 1000) + 'k' : value)
             },
-            label: function(context) {
-              return ` Spent: ₹${context.parsed.y.toLocaleString('en-IN')}`;
+            beginAtZero: true
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: theme.tooltipBg,
+            borderColor: '#a855f7',
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => ` ₹${Number(ctx.parsed.y).toLocaleString('en-IN')}`
             }
           }
         }
       }
-    }
-  });
-}
-
-export function renderMonthlyComparisonChart(canvasId, comparisonData) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
-
-  const theme = getChartTheme();
-  const labels = comparisonData.map(d => d.label);
-  const spentData = comparisonData.map(d => d.totalSpent);
-  const budgetData = comparisonData.map(d => d.budget);
-
-  if (monthlyComparisonChartInstance) {
-    monthlyComparisonChartInstance.destroy();
+    });
   }
 
-  monthlyComparisonChartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Total Spent',
-          data: spentData,
-          backgroundColor: theme.accent,
-          borderRadius: 6,
-          barPercentage: 0.65,
-          categoryPercentage: 0.7
-        },
-        {
-          label: 'Budget Limit',
-          data: budgetData,
-          backgroundColor: 'rgba(16, 185, 129, 0.45)',
-          borderColor: '#10b981',
-          borderWidth: 1.5,
-          borderRadius: 6,
-          barPercentage: 0.65,
-          categoryPercentage: 0.7
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: {
-            color: theme.textColor,
-            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 }
-          }
-        },
-        y: {
-          grid: { color: theme.gridColor },
-          ticks: {
-            color: theme.textColor,
-            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
-            callback: value => '₹' + (value >= 1000 ? (value / 1000) + 'k' : value)
-          },
-          beginAtZero: true
-        }
+  // 2. Category Comparison Bar Chart (#anCategoryBarChart)
+  const barCtx = document.getElementById('anCategoryBarChart');
+  if (barCtx && typeof Chart !== 'undefined') {
+    const breakdown = store.getCategoryBreakdown(monthKey);
+    const labels = [];
+    const data = [];
+    const colors = [];
+
+    const allCats = store.getCategories ? store.getCategories() : CATEGORIES;
+    allCats.forEach(c => {
+      const val = breakdown[c.id] || 0;
+      if (val > 0) {
+        labels.push(c.label || c.name || c.id);
+        data.push(val);
+        colors.push(c.color || '#38bdf8');
+      }
+    });
+
+    if (anCategoryBarChartInstance) anCategoryBarChartInstance.destroy();
+
+    anCategoryBarChartInstance = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: labels.length > 0 ? labels : ['No Data'],
+        datasets: [{
+          label: 'Category Spending (₹)',
+          data: data.length > 0 ? data : [0],
+          backgroundColor: colors.length > 0 ? colors : ['rgba(255,255,255,0.1)'],
+          borderRadius: 6
+        }]
       },
-      plugins: {
-        legend: {
-          position: 'top',
-          align: 'end',
-          labels: {
-            color: theme.textColor,
-            font: { family: "'Plus Jakarta Sans', sans-serif", size: 12 },
-            boxWidth: 12,
-            usePointStyle: true,
-            pointStyle: 'circle'
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { grid: { display: false }, ticks: { color: theme.textColor } },
+          y: {
+            grid: { color: theme.gridColor },
+            ticks: {
+              color: theme.textColor,
+              callback: value => '₹' + (value >= 1000 ? (value / 1000) + 'k' : value)
+            },
+            beginAtZero: true
           }
         },
-        tooltip: {
-          backgroundColor: theme.tooltipBg,
-          titleColor: theme.tooltipText,
-          bodyColor: theme.tooltipText,
-          borderColor: theme.tooltipBorder,
-          borderWidth: 1,
-          padding: 10,
-          cornerRadius: 8,
-          callbacks: {
-            label: function(context) {
-              return ` ${context.dataset.label}: ₹${context.parsed.y.toLocaleString('en-IN')}`;
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: theme.tooltipBg,
+            borderColor: theme.tooltipBorder,
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => ` ₹${Number(ctx.parsed.y).toLocaleString('en-IN')}`
             }
           }
         }
       }
-    }
-  });
+    });
+  }
+
+  // 3. Payment Donut (#anPaymentDonutChart)
+  const payCtx = document.getElementById('anPaymentDonutChart');
+  if (payCtx && typeof Chart !== 'undefined') {
+    const payBreakdown = store.getPaymentMethodBreakdown(monthKey);
+    renderPaymentChart('anPaymentDonutChart', payBreakdown);
+  }
 }
 
-export function refreshAllCharts(store) {
+/**
+ * Universal refresh for all charts in the active views
+ */
+export function refreshAllCharts(store, activePeriod = 'monthly') {
   const monthKey = store.getSelectedMonth();
   const categoryBreakdown = store.getCategoryBreakdown(monthKey);
   const paymentBreakdown = store.getPaymentMethodBreakdown(monthKey);
-  const dailySpending = store.getDailySpending(monthKey);
-  const comparisonData = store.getHistoricalMonthlyComparison(6);
 
+  // Dashboard charts
+  renderSpendingTrendChart('spendingTrendChart', store, activePeriod);
+  renderCategoryChart('categoryDonutChart', categoryBreakdown);
+
+  // Fallback IDs if present
   renderCategoryChart('categoryChart', categoryBreakdown);
   renderPaymentChart('paymentChart', paymentBreakdown);
-  renderDailyTrendChart('dailyTrendChart', dailySpending, monthKey);
-  renderMonthlyComparisonChart('monthlyComparisonChart', comparisonData);
+
+  // Analytics charts
+  renderAnalyticsCharts(store);
 }

@@ -21,9 +21,10 @@ export const expensesController = {
   },
 
   async create(req, res) {
-    const { item, amount, date, category, paymentMethod, notes, id } = req.body || {};
+    const { item, title, amount, date, category, paymentMethod, notes, id } = req.body || {};
+    const finalItem = (item || title || '').trim();
 
-    if (!item || !item.trim()) {
+    if (!finalItem) {
       return res.status(400).json({ error: 'Item description is required' });
     }
 
@@ -34,7 +35,7 @@ export const expensesController = {
 
     const newExpense = expenseDAO.create(req.user.id, {
       id,
-      item,
+      item: finalItem,
       amount: numAmount,
       date,
       category,
@@ -58,7 +59,8 @@ export const expensesController = {
   },
 
   async update(req, res) {
-    const { item, amount, date, category, paymentMethod, notes } = req.body || {};
+    const { item, title, amount, date, category, paymentMethod, notes } = req.body || {};
+    const finalItem = item !== undefined ? item : title;
 
     if (amount !== undefined) {
       const numAmount = parseFloat(amount);

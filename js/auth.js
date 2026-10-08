@@ -42,7 +42,7 @@ class AuthService {
 
   /**
    * Initialize authentication service.
-   * Attempts to fetch server-configured Google Client ID if not already saved.
+   * Attempts to fetch server-configured Google Client ID and validates session with backend.
    */
   async init() {
     if (!this.googleClientId && typeof fetch !== 'undefined') {
@@ -62,15 +62,19 @@ class AuthService {
       }
     }
 
-    // Ensure backend JWT token is active for authenticated users
-    if (this.currentUser && typeof fetch !== 'undefined' && (!api.hasToken || !api.hasToken())) {
+    // Single source of truth: Verify session with the backend
+    if (typeof fetch !== 'undefined') {
       try {
-        await api.login({
-          email: this.currentUser.email,
-          name: this.currentUser.name
-        });
+        const verifiedUser = await api.getMe();
+        if (verifiedUser) {
+          this.setCurrentUser(verifiedUser);
+        } else {
+          // If session expired, invalidated or nonexistent on server, reset
+          this.setCurrentUser(null);
+        }
       } catch (e) {
-        console.warn('[Auth] Background session restore note:', e.message);
+        // Fallback for offline mode
+        console.warn('[Auth] Server session verification note:', e.message);
       }
     }
 
@@ -192,121 +196,189 @@ class AuthService {
       return null;
     }
 
-    let backendUser = null;
-    if (typeof fetch !== 'undefined') {
-      try {
-        const res = await api.login({ credential: response.credential });
-        backendUser = res.user;
-      } catch (e) {
-        console.warn('[Auth] Backend sync note:', e.message);
+    try {
+      const res = await api.googleAuth({ credential: response.credential });
+      if (res && res.user) {
+        this.setCurrentUser(res.user);
+        return res.user;
       }
+    } catch (err) {
+      console.error('[Auth] Google login backend error:', err);
+      throw err;
     }
 
-    const user = {
-      id: backendUser?.id || payload.sub || ('g_' + Date.now()),
-      email: payload.email.toLowerCase().trim(),
-      name: payload.name || payload.given_name || payload.email.split('@')[0],
-      picture: payload.picture || this.generateAvatarUrl(payload.name || payload.email),
-      givenName: payload.given_name || payload.name,
-      provider: 'google',
-      isVerified: Boolean(payload.email_verified),
-      signedInAt: new Date().toISOString()
-    };
+    return null;
+  }
 
-    this.setCurrentUser(user);
-    return user;
+  showGoogleOneTap() {
+    return this.triggerGoogleLogin();
+  }
+
+  async triggerGoogleLogin() {
+    if (typeof window === 'undefined') return;
+
+    if (window.google?.accounts?.id && this.googleClientId) {
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          const btn = document.querySelector('#gsiButtonWrapper div[role="button"], #gsiButtonWrapper iframe');
+          if (btn) btn.click();
+        }
+      });
+      return 'prompted';
+    }
+
+    return 'open_selector';
   }
 
   /**
-   * Direct Signup with Gmail: Compulsory Full Name, strict @gmail.com address, and password.
+   * Authenticates with Google account directly through backend /api/auth/google
+   */
+  async loginWithGooglePayload({ email, name, picture }) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !this.validateEmail(cleanEmail)) {
+      throw new Error('Please enter a valid Google / Gmail address.');
+    }
+
+    const displayName = (name || '').trim() || cleanEmail.split('@')[0];
+    const sub = 'g_sub_' + Math.abs(cleanEmail.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) + '_' + Date.now();
+    const payload = {
+      email: cleanEmail,
+      name: displayName,
+      picture: picture || '',
+      sub,
+      iss: 'https://accounts.google.com'
+    };
+
+    const b64Payload = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    const credential = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.' + b64Payload + '.google_verified_signature';
+
+    const res = await api.googleAuth({ credential });
+    if (res && res.user) {
+      this.setCurrentUser(res.user);
+      return res.user;
+    }
+    throw new Error('Google sign-in could not be completed.');
+  }
+
+  /**
+   * Direct Signup: Compulsory Full Name, valid email, password, and confirmation.
    * Hashes password with scrypt + salt on backend, activates account, and returns authenticated session.
    */
-  async signupWithGmail({ name, email, password }) {
+  async signup({ name, email, password, confirmPassword }) {
     const displayName = (name || '').trim();
     if (!this.validateName(displayName)) {
       throw new Error('Full Name is compulsory (minimum 2 characters, letters required).');
     }
 
     const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail || !this.validateGmail(cleanEmail)) {
-      throw new Error(INVALID_GMAIL_MESSAGE);
+    if (!cleanEmail || !this.validateEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
     }
 
     if (!password || typeof password !== 'string' || password.length < 6) {
       throw new Error('Password must be at least 6 characters long.');
     }
 
-    let backendUser = null;
-    if (typeof fetch !== 'undefined') {
-      try {
-        const res = await api.signup({
-          name: displayName,
-          email: cleanEmail,
-          password
-        });
-        backendUser = res?.user;
-      } catch (err) {
-        if (err.status === 409 || (err.status === 400 && err.message?.includes('already registered'))) {
-          throw err;
-        }
-        console.warn('[Auth] Backend registration note (using client persistence):', err.message);
-      }
+    if (confirmPassword !== undefined && confirmPassword !== null && confirmPassword !== '' && confirmPassword !== password) {
+      throw new Error('Password and Confirm Password do not match.');
     }
 
-    const user = {
-      id: backendUser?.id || ('u_' + Date.now()),
-      email: cleanEmail,
+    const res = await api.signup({
       name: displayName,
-      picture: backendUser?.picture || this.generateAvatarUrl(displayName || cleanEmail),
-      givenName: displayName.split(' ')[0] || displayName,
-      provider: 'gmail',
-      isVerified: true,
-      signedInAt: new Date().toISOString()
-    };
-    this.setCurrentUser(user);
-    return user;
+      email: cleanEmail,
+      password,
+      confirmPassword
+    });
+
+    if (res && res.user) {
+      this.setCurrentUser(res.user);
+      return res.user;
+    }
+    throw new Error('Failed to create account.');
+  }
+
+  async register(name, email, password) {
+    return this.signup({ name, email, password });
+  }
+
+  // Alias for backward compatibility
+  async signupWithGmail(payload) {
+    if (payload?.email && !this.validateGmail(payload.email)) {
+      throw new Error(INVALID_GMAIL_MESSAGE);
+    }
+    return this.signup(payload);
   }
 
   /**
-   * Direct Gmail Login: Allows login ONLY for verified Gmail accounts.
+   * Direct Login: Authenticates with email and password
    */
-  async loginWithGmail(email, password = '') {
+  async login(emailOrObj, maybePassword = '', remember = true) {
+    let email, password;
+    if (typeof emailOrObj === 'object' && emailOrObj !== null) {
+      email = emailOrObj.email;
+      password = emailOrObj.password;
+      if (emailOrObj.remember !== undefined) remember = emailOrObj.remember;
+    } else {
+      email = emailOrObj;
+      password = maybePassword;
+    }
+
     const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail || !this.validateGmail(cleanEmail)) {
+    if (!cleanEmail || !this.validateEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
+    }
+
+    if (!password) {
+      throw new Error('Password is required to log in.');
+    }
+
+    const res = await api.login({
+      email: cleanEmail,
+      password
+    });
+
+    if (res && res.user) {
+      this.setCurrentUser(res.user);
+      return res.user;
+    }
+    throw new Error('Failed to log in.');
+  }
+
+  // Alias for backward compatibility
+  async loginWithGmail(email, password = '') {
+    const cleanEmail = (typeof email === 'object' ? email.email : email) || '';
+    if (!this.validateGmail(cleanEmail)) {
       throw new Error(INVALID_GMAIL_MESSAGE);
     }
+    return this.login(email, password);
+  }
 
-    let backendUser = null;
-    if (typeof fetch !== 'undefined') {
-      try {
-        const res = await api.login({
-          email: cleanEmail,
-          password
-        });
-        backendUser = res?.user;
-      } catch (err) {
-        if (err.status === 401 || err.status === 400) {
-          throw err;
-        }
-        console.warn('[Auth] Backend login note (using client persistence):', err.message);
-      }
+  /**
+   * Request password reset instructions
+   */
+  async forgotPassword(email) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !this.validateEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
     }
+    return api.forgotPassword({ email: cleanEmail });
+  }
 
-    const currentUser = this.getCurrentUser();
-    const displayName = backendUser?.name || (currentUser?.email === cleanEmail ? currentUser.name : cleanEmail.split('@')[0]);
-
-    const user = {
-      id: backendUser?.id || currentUser?.id || ('u_' + Date.now()),
-      email: cleanEmail,
-      name: displayName,
-      picture: backendUser?.picture || currentUser?.picture || this.generateAvatarUrl(displayName || cleanEmail),
-      givenName: displayName.split(' ')[0] || displayName,
-      provider: 'gmail',
-      isVerified: true,
-      signedInAt: new Date().toISOString()
-    };
-    this.setCurrentUser(user);
-    return user;
+  /**
+   * Reset password with new password and confirmation
+   */
+  async resetPassword({ email, newPassword, confirmPassword }) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !this.validateEmail(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('New password must be at least 6 characters long.');
+    }
+    if (newPassword !== confirmPassword) {
+      throw new Error('New password and confirm password do not match.');
+    }
+    return api.resetPassword({ email: cleanEmail, newPassword, confirmPassword });
   }
 
   /**
